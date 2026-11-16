@@ -1,0 +1,24 @@
+{
+  "name": "scrcpy-web-mirror",
+  "version": "4.0.11",
+  "description": "scrcpy 便捷网页版: USB/wireless ADB mirror, audio, fullscreen",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "python serve.py"
+  },
+  "dependencies": {
+    "@yume-chan/adb": "^2.6.4",
+    "@yume-chan/adb-credential-web": "^2.1.0",
+    "@yume-chan/adb-daemon-webusb": "^2.3.2",
+    "@yume-chan/adb-scrcpy": "^2.3.2",
+    "@yume-chan/pcm-player": "^1.0.0",
+    "@yume-chan/scrcpy": "^2.3.0",
+    "@yume-chan/scrcpy-decoder-tinyh264": "^2.1.0",
+    "@yume-chan/scrcpy-decoder-webcodecs": "^2.5.3",
+    "@yume-chan/stream-extra": "^2.6.1",
+    "@yume-chan/struct": "^2.3.2",
+    "esbuild": "^0.28.2"
+  }
+}

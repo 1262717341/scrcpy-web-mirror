@@ -1,0 +1,26 @@
+# 依赖与构建缓存
+node_modules/
+__pycache__/
+*.pyc
+
+# 本地运行时与第三方二进制（体积大，按 README 自行放置）
+runtime/
+assets/adb/
+*.exe
+*.zip
+
+# 构建产物（已入库一份，重新构建时忽略 map）
+js/*.map
+
+# 运行时日志与临时文件
+*.log
+*.pid
+wireless.log
+.http-server.pid
+
+# 系统与编辑器
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
