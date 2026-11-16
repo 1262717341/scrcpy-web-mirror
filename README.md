@@ -23,7 +23,11 @@
 | 界面 | 侧边工具轨 + 抽屉式面板，支持全屏（H）、沉浸模式（I）、静音（M）、停止投屏（Shift+Esc） |
 | 皮肤 | 内置 warm / mint / cobalt / graphite 四套配色，自定义主色与背景色，工具轨可左右切换 |
 
-## 快速开始
+## 下载安装
+
+不想配环境？直接下安装包：**[scrcpy-web-mirror-v4.0.11-Setup-x64.exe](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**（约 15 MB，内置 Python 运行时与官方 adb）。安装后双击桌面快捷方式启动，手机开「USB 调试」并连上电脑，点「开始 USB 投屏」即可。
+
+## 从源码运行（开发者）
 
 > 前置条件：Windows 10 / 11、Python 3.9+、Chrome 或 Edge 110+。仓库已带构建好的 `js/mirror.bundle.js`，不装 Node 也能直接跑。
 
@@ -48,7 +52,6 @@ cd scrcpy-web-mirror
    ```
 
 > `start.vbs` 是安装包内的静默启动脚本，依赖同目录的 `runtime\pythonw.exe`（内置 Python 运行时）；源码环境用系统 Python 直接跑 `serve.py` 即可。
-> 免配置的 exe 安装包（约 15 MB，内含内置运行时与官方 adb）暂未随仓库发布。
 
 ## 使用流程
 
