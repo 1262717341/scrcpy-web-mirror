@@ -25,11 +25,7 @@
 
 ## 快速开始
 
-### 方式一：安装包（推荐给普通用户）
-
-从 Releases 下载 `scrcpy便捷网页版-v4.0.11-Setup-x64.exe` 安装，双击桌面快捷方式即可启动（安装包内含内置 Python 运行时与官方 adb，无需另配环境）。
-
-### 方式二：从源码运行（开发者）
+> 前置条件：Windows 10 / 11、Python 3.9+、Chrome 或 Edge 110+。仓库已带构建好的 `js/mirror.bundle.js`，不装 Node 也能直接跑。
 
 ```bash
 git clone https://github.com/1262717341/scrcpy-web-mirror.git
@@ -37,23 +33,22 @@ cd scrcpy-web-mirror
 ```
 
 1. **补齐 adb**：把官方 platform-tools 里的 `adb.exe`、`AdbWinApi.dll`、`AdbWinUsbApi.dll` 放进 `assets/adb/`（受体积限制未入库）。
-2. **构建前端 bundle**（仓库已带 `js/mirror.bundle.js`，跳过此步也能直接跑）：
+2. **启动本地服务**：
+
+   ```bash
+   python serve.py
+   ```
+
+   然后浏览器打开 <http://127.0.0.1:8765/control.html>。端口可用环境变量 `PANDA_PORT` 覆盖。
+3. **改前端时再构建**（可选）：
 
    ```bash
    npm install
    npm run build
    ```
 
-3. **启动本地服务**：
-
-   ```bash
-   python serve.py
-   ```
-
-   然后浏览器打开 <http://127.0.0.1:8765/control.html>。
-   端口可用环境变量 `PANDA_PORT` 覆盖。
-
-> `start.vbs` 是安装包里的静默启动脚本，依赖同目录下的 `runtime\pythonw.exe`（内置运行时）。源码环境直接用系统 Python 启动 `serve.py` 即可。
+> `start.vbs` 是安装包内的静默启动脚本，依赖同目录的 `runtime\pythonw.exe`（内置 Python 运行时）；源码环境用系统 Python 直接跑 `serve.py` 即可。
+> 免配置的 exe 安装包（约 15 MB，内含内置运行时与官方 adb）暂未随仓库发布。
 
 ## 使用流程
 
