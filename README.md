@@ -10,6 +10,8 @@
 - 内核：scrcpy-server 5.0.1 · `@yume-chan/adb` / `@yume-chan/scrcpy`
 - 平台：Windows 10 / 11，浏览器 Chrome / Edge 110+
 
+> **非官方项目**：本项目是第三方网页端实现，不是 [scrcpy](https://github.com/Genymobile/scrcpy) 官方项目，与 Genymobile 无隶属或背书关系。第三方组件的版权与许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
 ## 功能特性
 
 | 能力 | 说明 |
@@ -117,13 +119,22 @@ npm install
 npm run build     # esbuild 打包 src/page-mirror.js → js/mirror.bundle.js
 ```
 
-## 许可证与致谢
+## 来源、许可与致谢
 
-本项目以 **Apache-2.0** 许可发布，见 [LICENSE](LICENSE)。
+本项目自身代码以 **Apache-2.0** 发布，见 [LICENSE](LICENSE)。
 
-- [scrcpy](https://github.com/Genymobile/scrcpy)（Apache-2.0）：服务端与整体思路来源，`assets/scrcpy-server.jar` 为其发布产物。
-- [@yume-chan/scrcpy / adb](https://github.com/yume-chan/ya-webadb)（MIT）：浏览器侧 ADB 与 scrcpy 协议实现。
-- [esbuild](https://github.com/evanw/esbuild)（MIT）：前端打包。
+用到的第三方作品（完整清单、用途与许可全文见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，原文在 `third_party/`）：
+
+| 组件 | 用途 | 许可 | 版权 | 上游 |
+| --- | --- | --- | --- | --- |
+| scrcpy 5.0.1（`assets/scrcpy-server.jar`） | 手机端服务、投屏与控制协议 | Apache-2.0 | © Genymobile | [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) |
+| @yume-chan/adb、scrcpy、pcm-player 等 13 个包 | 浏览器 ADB、scrcpy 协议、音频播放 | MIT | © 2020–2025 Simon Chan | [yume-chan/ya-webadb](https://github.com/yume-chan/ya-webadb) |
+| tinyh264 | H.264 软件解码回落 | Apache-2.0 | © Erik De Rijcke | [aaaronic/tinyh264](https://github.com/aaaronic/tinyh264) |
+| yuv-buffer / yuv-canvas | YUV 帧转换与 Canvas 绘制 | MIT | © 2014–2024 Brooke Vibber | [btlr/yuv-canvas](https://github.com/btlr/yuv-canvas) |
+| esbuild | 打包 `js/mirror.bundle.js` | MIT | © 2020 Evan Wallace | [evanw/esbuild](https://github.com/evanw/esbuild) |
+| Android platform-tools | 需自行放入 `assets/adb/`，不随仓库分发 | Apache-2.0 | © Google LLC | [developer.android.com](https://developer.android.com/tools/releases/platform-tools) |
+
+`scrcpy`、`Android`、`Chrome`、`Edge`、`Windows` 等名称与商标归各自所有者。本项目与上述项目均无隶属关系，也不代表其官方立场。
 
 ## 免责声明
 
