@@ -33,9 +33,9 @@
     mod
   ));
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-buffer/yuv-buffer.js
+  // node_modules/yuv-buffer/yuv-buffer.js
   var require_yuv_buffer = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-buffer/yuv-buffer.js"(exports, module) {
+    "node_modules/yuv-buffer/yuv-buffer.js"(exports, module) {
       var YUVBuffer = {
         /**
          * Validate a plane dimension
@@ -226,9 +226,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/FrameSink.js
+  // node_modules/yuv-canvas/src/FrameSink.js
   var require_FrameSink = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/FrameSink.js"(exports, module) {
+    "node_modules/yuv-canvas/src/FrameSink.js"(exports, module) {
       (function() {
         "use strict";
         function FrameSink(canvas, options) {
@@ -245,9 +245,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/depower.js
+  // node_modules/yuv-canvas/src/depower.js
   var require_depower = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/depower.js"(exports, module) {
+    "node_modules/yuv-canvas/src/depower.js"(exports, module) {
       (function() {
         "use strict";
         function depower(ratio) {
@@ -266,9 +266,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/YCbCr.js
+  // node_modules/yuv-canvas/src/YCbCr.js
   var require_YCbCr = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/YCbCr.js"(exports, module) {
+    "node_modules/yuv-canvas/src/YCbCr.js"(exports, module) {
       (function() {
         "use strict";
         var depower = require_depower();
@@ -345,9 +345,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/SoftwareFrameSink.js
+  // node_modules/yuv-canvas/src/SoftwareFrameSink.js
   var require_SoftwareFrameSink = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/SoftwareFrameSink.js"(exports, module) {
+    "node_modules/yuv-canvas/src/SoftwareFrameSink.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), YCbCr = require_YCbCr();
@@ -411,9 +411,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/build/shaders.js
+  // node_modules/yuv-canvas/build/shaders.js
   var require_shaders = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/build/shaders.js"(exports, module) {
+    "node_modules/yuv-canvas/build/shaders.js"(exports, module) {
       module.exports = {
         vertex: "precision mediump float;\n\nattribute vec2 aPosition;\nattribute vec2 aLumaPosition;\nattribute vec2 aChromaPosition;\nvarying vec2 vLumaPosition;\nvarying vec2 vChromaPosition;\nvoid main() {\n    gl_Position = vec4(aPosition, 0, 1);\n    vLumaPosition = aLumaPosition;\n    vChromaPosition = aChromaPosition;\n}\n",
         fragment: "// inspired by https://github.com/mbebenita/Broadway/blob/master/Player/canvas.js\n\nprecision mediump float;\n\nuniform sampler2D uTextureY;\nuniform sampler2D uTextureCb;\nuniform sampler2D uTextureCr;\nvarying vec2 vLumaPosition;\nvarying vec2 vChromaPosition;\nvoid main() {\n   // Y, Cb, and Cr planes are uploaded as ALPHA textures.\n   float fY = texture2D(uTextureY, vLumaPosition).w;\n   float fCb = texture2D(uTextureCb, vChromaPosition).w;\n   float fCr = texture2D(uTextureCr, vChromaPosition).w;\n\n   // Premultipy the Y...\n   float fYmul = fY * 1.1643828125;\n\n   // And convert that to RGB!\n   gl_FragColor = vec4(\n     fYmul + 1.59602734375 * fCr - 0.87078515625,\n     fYmul - 0.39176171875 * fCb - 0.81296875 * fCr + 0.52959375,\n     fYmul + 2.017234375   * fCb - 1.081390625,\n     1\n   );\n}\n",
@@ -423,9 +423,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/WebGLFrameSink.js
+  // node_modules/yuv-canvas/src/WebGLFrameSink.js
   var require_WebGLFrameSink = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/WebGLFrameSink.js"(exports, module) {
+    "node_modules/yuv-canvas/src/WebGLFrameSink.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), shaders = require_shaders();
@@ -868,9 +868,9 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/yuv-canvas.js
+  // node_modules/yuv-canvas/src/yuv-canvas.js
   var require_yuv_canvas = __commonJS({
-    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/yuv-canvas.js"(exports, module) {
+    "node_modules/yuv-canvas/src/yuv-canvas.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), SoftwareFrameSink = require_SoftwareFrameSink(), WebGLFrameSink = require_WebGLFrameSink();
@@ -904,7 +904,7 @@
     }
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/promise-resolver.js
+  // node_modules/@yume-chan/async/esm/promise-resolver.js
   var PromiseResolver = class {
     #promise;
     get promise() {
@@ -932,7 +932,7 @@
     };
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/async-operation-manager.js
+  // node_modules/@yume-chan/async/esm/async-operation-manager.js
   var AsyncOperationManager = class {
     nextId;
     pendingResolvers = /* @__PURE__ */ new Map();
@@ -971,19 +971,19 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/delay.js
+  // node_modules/@yume-chan/async/esm/delay.js
   function delay(time) {
     return new Promise((resolve) => {
       globalThis.setTimeout(() => resolve(), time);
     });
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/maybe-promise.js
+  // node_modules/@yume-chan/async/esm/maybe-promise.js
   function isPromiseLike(value) {
     return typeof value === "object" && value !== null && "then" in value;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/bipedal.js
+  // node_modules/@yume-chan/struct/esm/bipedal.js
   function advance(iterator, next) {
     while (true) {
       const { done, value } = iterator.next(next);
@@ -1019,7 +1019,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/field/serialize.js
+  // node_modules/@yume-chan/struct/esm/field/serialize.js
   function defaultFieldSerializer(serializer) {
     return (source, context) => {
       if ("buffer" in context) {
@@ -1049,7 +1049,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/field/factory.js
+  // node_modules/@yume-chan/struct/esm/field/factory.js
   // @__NO_SIDE_EFFECTS__
   function _field(size, type, serialize3, deserialize, options) {
     const field2 = {
@@ -1066,7 +1066,7 @@
   }
   var field = _field;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/buffer.js
+  // node_modules/@yume-chan/struct/esm/buffer.js
   var EmptyUint8Array = new Uint8Array(0);
   function copyMaybeDifferentLength(dest, source, index, length) {
     if (source.length < length) {
@@ -1212,7 +1212,7 @@
     return field(0, "default", (source) => source, deserialize, { init });
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/readable.js
+  // node_modules/@yume-chan/struct/esm/readable.js
   var ExactReadableEndedError = class extends Error {
     constructor() {
       super("ExactReadable ended");
@@ -1238,7 +1238,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/struct.js
+  // node_modules/@yume-chan/struct/esm/struct.js
   var StructDeserializeError = class extends Error {
     constructor(message) {
       super(message);
@@ -1369,7 +1369,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/extend.js
+  // node_modules/@yume-chan/struct/esm/extend.js
   // @__NO_SIDE_EFFECTS__
   function extend(base, fields, options) {
     return struct(Object.assign({}, base.fields, fields), {
@@ -1379,7 +1379,7 @@
     });
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int16.js
+  // node_modules/@yume-chan/no-data-view/esm/int16.js
   // @__NO_SIDE_EFFECTS__
   function getInt16(buffer2, offset, littleEndian) {
     return littleEndian ? (buffer2[offset] | buffer2[offset + 1] << 8) << 16 >> 16 : (buffer2[offset] << 8 | buffer2[offset + 1]) << 16 >> 16;
@@ -1394,7 +1394,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int32.js
+  // node_modules/@yume-chan/no-data-view/esm/int32.js
   // @__NO_SIDE_EFFECTS__
   function getInt32(buffer2, offset, littleEndian) {
     return littleEndian ? buffer2[offset] | buffer2[offset + 1] << 8 | buffer2[offset + 2] << 16 | buffer2[offset + 3] << 24 : buffer2[offset] << 24 | buffer2[offset + 1] << 16 | buffer2[offset + 2] << 8 | buffer2[offset + 3];
@@ -1413,7 +1413,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int64.js
+  // node_modules/@yume-chan/no-data-view/esm/int64.js
   function setInt64LittleEndian(buffer2, offset, value) {
     buffer2[offset] = Number(value & 0xffn);
     buffer2[offset + 1] = Number(value >> 8n & 0xffn);
@@ -1435,7 +1435,7 @@
     buffer2[offset + 7] = Number(value & 0xffn);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint16.js
+  // node_modules/@yume-chan/no-data-view/esm/uint16.js
   // @__NO_SIDE_EFFECTS__
   function getUint16BigEndian(buffer2, offset) {
     return buffer2[offset] << 8 | buffer2[offset + 1];
@@ -1454,7 +1454,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint32.js
+  // node_modules/@yume-chan/no-data-view/esm/uint32.js
   // @__NO_SIDE_EFFECTS__
   function getUint32LittleEndian(buffer2, offset) {
     return (buffer2[offset] | buffer2[offset + 1] << 8 | buffer2[offset + 2] << 16 | buffer2[offset + 3] << 24) >>> 0;
@@ -1487,7 +1487,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint64.js
+  // node_modules/@yume-chan/no-data-view/esm/uint64.js
   function getUint64BigEndian(buffer2, offset) {
     return BigInt(buffer2[offset]) << 56n | BigInt(buffer2[offset + 1]) << 48n | BigInt(buffer2[offset + 2]) << 40n | BigInt(buffer2[offset + 3]) << 32n | BigInt(buffer2[offset + 4]) << 24n | BigInt(buffer2[offset + 5]) << 16n | BigInt(buffer2[offset + 6]) << 8n | BigInt(buffer2[offset + 7]);
   }
@@ -1516,7 +1516,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/number.js
+  // node_modules/@yume-chan/struct/esm/number.js
   // @__NO_SIDE_EFFECTS__
   function number(size, serialize3, deserialize) {
     const fn = (() => fn);
@@ -1554,7 +1554,7 @@
     return getUint64(data, 0, littleEndian);
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/utils.js
+  // node_modules/@yume-chan/struct/esm/utils.js
   var { TextEncoder: TextEncoder2, TextDecoder: TextDecoder2 } = globalThis;
   var SharedEncoder = /* @__PURE__ */ new TextEncoder2();
   var SharedDecoder = /* @__PURE__ */ new TextDecoder2();
@@ -1567,7 +1567,7 @@
     return SharedDecoder.decode(buffer2);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/string.js
+  // node_modules/@yume-chan/struct/esm/string.js
   var string = (/* @__NO_SIDE_EFFECTS__ */ (lengthOrField) => {
     const field2 = buffer(lengthOrField, {
       convert: decodeUtf8,
@@ -1577,7 +1577,7 @@
     return field2;
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/stream.js
+  // node_modules/@yume-chan/stream-extra/esm/stream.js
   var { AbortController: AbortController2 } = globalThis;
   var ReadableStream2 = /* @__PURE__ */ (() => {
     const { ReadableStream: ReadableStream3 } = globalThis;
@@ -1624,7 +1624,7 @@
   })();
   var { WritableStream, TransformStream: TransformStream2 } = globalThis;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/task-queue.js
+  // node_modules/@yume-chan/stream-extra/esm/task-queue.js
   var TaskQueue = class {
     #ready;
     #disposed = false;
@@ -1673,7 +1673,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/push-readable.js
+  // node_modules/@yume-chan/stream-extra/esm/push-readable.js
   var PushReadableStream = class extends ReadableStream2 {
     /**
      * Create a new `PushReadableStream` from a source.
@@ -1857,7 +1857,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/try-close.js
+  // node_modules/@yume-chan/stream-extra/esm/try-close.js
   function tryClose(value) {
     try {
       const result = value.close();
@@ -1878,7 +1878,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/buffered.js
+  // node_modules/@yume-chan/stream-extra/esm/buffered.js
   var BufferedReadableStream = class {
     #buffered;
     // PERF: `subarray` is slow
@@ -2020,7 +2020,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/buffered-transform.js
+  // node_modules/@yume-chan/stream-extra/esm/buffered-transform.js
   var BufferedTransformStream = class {
     #readable;
     get readable() {
@@ -2070,7 +2070,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/concat.js
+  // node_modules/@yume-chan/stream-extra/esm/concat.js
   var ConcatStringStream = class {
     // PERF: rope (concat strings) is faster than `[].join('')`
     #result = "";
@@ -2176,7 +2176,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/readable.js
+  // node_modules/@yume-chan/stream-extra/esm/consumable/readable.js
   var ConsumableReadableStream = class _ConsumableReadableStream extends ReadableStream2 {
     static async enqueue(controller, chunk) {
       const output = new Consumable(chunk);
@@ -2222,7 +2222,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/wrap-byte-readable.js
+  // node_modules/@yume-chan/stream-extra/esm/consumable/wrap-byte-readable.js
   var ConsumableWrapByteReadableStream = class extends ReadableStream2 {
     constructor(stream, chunkSize, min) {
       const reader = stream.getReader({ mode: "byob" });
@@ -2244,7 +2244,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/wrap-writable.js
+  // node_modules/@yume-chan/stream-extra/esm/consumable/wrap-writable.js
   var ConsumableWrapWritableStream = class extends WritableStream {
     constructor(stream) {
       const writer = stream.getWriter();
@@ -2262,7 +2262,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/writable.js
+  // node_modules/@yume-chan/stream-extra/esm/consumable/writable.js
   var ConsumableWritableStream = class extends WritableStream {
     static async write(writer, value) {
       const consumable = new Consumable(value);
@@ -2299,7 +2299,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/task.js
+  // node_modules/@yume-chan/stream-extra/esm/task.js
   var { console: console2 } = globalThis;
   var createTask = /* @__PURE__ */ (() => console2?.createTask?.bind(console2) ?? (() => ({
     run(callback) {
@@ -2307,7 +2307,7 @@
     }
   })))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable.js
+  // node_modules/@yume-chan/stream-extra/esm/consumable.js
   var Consumable = class {
     static WritableStream = ConsumableWritableStream;
     static WrapWritableStream = ConsumableWrapWritableStream;
@@ -2351,7 +2351,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/index.js
+  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/index.js
   var maybe_consumable_exports = {};
   __export(maybe_consumable_exports, {
     WrapWritableStream: () => MaybeConsumableWrapWritableStream,
@@ -2360,7 +2360,7 @@
     tryConsume: () => tryConsume
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/utils.js
+  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/utils.js
   function getValue(value) {
     return value instanceof Consumable ? value.value : value;
   }
@@ -2372,7 +2372,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/wrap-writable.js
+  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/wrap-writable.js
   var MaybeConsumableWrapWritableStream = class extends WritableStream {
     constructor(stream) {
       const writer = stream.getWriter();
@@ -2390,7 +2390,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/writable.js
+  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/writable.js
   var MaybeConsumableWritableStream = class extends WritableStream {
     constructor(sink, strategy) {
       let wrappedStrategy;
@@ -2422,7 +2422,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/distribution.js
+  // node_modules/@yume-chan/stream-extra/esm/distribution.js
   var BufferCombiner = class {
     #capacity;
     #buffer;
@@ -2518,7 +2518,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/wrap-readable.js
+  // node_modules/@yume-chan/stream-extra/esm/wrap-readable.js
   function getWrappedReadableStream(wrapper, controller) {
     if ("start" in wrapper) {
       return wrapper.start(controller);
@@ -2564,7 +2564,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/duplex.js
+  // node_modules/@yume-chan/stream-extra/esm/duplex.js
   var NOOP = () => {
   };
   var DuplexStreamFactory = class {
@@ -2635,12 +2635,12 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/encoding.js
+  // node_modules/@yume-chan/stream-extra/esm/encoding.js
   var Global = globalThis;
   var TextDecoderStream = Global.TextDecoderStream;
   var TextEncoderStream = Global.TextEncoderStream;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/inspect.js
+  // node_modules/@yume-chan/stream-extra/esm/inspect.js
   var InspectStream = class extends TransformStream2 {
     constructor(callback) {
       super({
@@ -2652,7 +2652,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/pipe-from.js
+  // node_modules/@yume-chan/stream-extra/esm/pipe-from.js
   function pipeFrom(writable, pair) {
     const writer = pair.writable.getWriter();
     const pipe = pair.readable.pipeTo(writable);
@@ -2667,7 +2667,7 @@
     });
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/split-string.js
+  // node_modules/@yume-chan/stream-extra/esm/split-string.js
   var SplitStringStream = class extends TransformStream2 {
     constructor(separator) {
       let remaining = void 0;
@@ -2697,7 +2697,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/struct-deserialize.js
+  // node_modules/@yume-chan/stream-extra/esm/struct-deserialize.js
   var StructDeserializeStream = class extends BufferedTransformStream {
     constructor(struct2) {
       super((stream) => {
@@ -2706,7 +2706,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/disposable.js
+  // node_modules/@yume-chan/event/esm/disposable.js
   var AutoDisposable = class {
     #disposables = [];
     constructor() {
@@ -2724,7 +2724,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/event-emitter.js
+  // node_modules/@yume-chan/event/esm/event-emitter.js
   var EventEmitter = class {
     listeners = [];
     constructor() {
@@ -2759,7 +2759,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/sticky-event-emitter.js
+  // node_modules/@yume-chan/event/esm/sticky-event-emitter.js
   var Undefined = /* @__PURE__ */ Symbol("undefined");
   var StickyEventEmitter = class extends EventEmitter {
     #value = Undefined;
@@ -2775,7 +2775,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/base.js
+  // node_modules/@yume-chan/adb/esm/commands/base.js
   var AdbServiceBase = class extends AutoDisposable {
     #adb;
     get adb() {
@@ -2787,7 +2787,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/framebuffer.js
+  // node_modules/@yume-chan/adb/esm/commands/framebuffer.js
   var Version = struct({ version: u32 }, { littleEndian: true });
   var AdbFrameBufferV1 = struct({
     bpp: u32,
@@ -2857,7 +2857,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/power.js
+  // node_modules/@yume-chan/adb/esm/commands/power.js
   var AdbPower = class extends AdbServiceBase {
     reboot(mode2 = "") {
       return this.adb.createSocketAndWait(`reboot:${mode2}`);
@@ -2903,7 +2903,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/array-buffer.js
+  // node_modules/@yume-chan/adb/esm/utils/array-buffer.js
   function toLocalUint8Array(value) {
     if (value.buffer instanceof ArrayBuffer) {
       return value;
@@ -2913,7 +2913,7 @@
     return copy;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/auto-reset-event.js
+  // node_modules/@yume-chan/adb/esm/utils/auto-reset-event.js
   var AutoResetEvent = class {
     #set;
     #queue = [];
@@ -2946,7 +2946,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/base64.js
+  // node_modules/@yume-chan/adb/esm/utils/base64.js
   var [charToIndex, indexToChar, paddingChar] = /* @__PURE__ */ (() => {
     const charToIndex2 = [];
     const indexToChar2 = [];
@@ -3081,7 +3081,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/hex.js
+  // node_modules/@yume-chan/adb/esm/utils/hex.js
   function hexCharToNumber(char) {
     if (char < 48) {
       throw new TypeError(`Invalid hex char ${char}`);
@@ -3111,14 +3111,14 @@
     return result;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/no-op.js
+  // node_modules/@yume-chan/adb/esm/utils/no-op.js
   var NOOP2 = /* @__NO_SIDE_EFFECTS__ */ () => {
   };
   function unreachable(...args) {
     throw new Error("Unreachable. Arguments:\n" + args.join("\n"));
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/sequence-equal.js
+  // node_modules/@yume-chan/adb/esm/utils/sequence-equal.js
   function sequenceEqual(a, b) {
     if (a.length !== b.length) {
       return false;
@@ -3131,7 +3131,7 @@
     return true;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/reverse.js
+  // node_modules/@yume-chan/adb/esm/commands/reverse.js
   var AdbReverseStringResponse = struct({
     length: string(4),
     content: string({
@@ -3253,7 +3253,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/process.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/process.js
   var AdbNoneProtocolProcessImpl = class {
     #socket;
     get stdin() {
@@ -3285,7 +3285,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/pty.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/pty.js
   var AdbNoneProtocolPtyProcess = class {
     #socket;
     #writer;
@@ -3314,7 +3314,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/utils.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/utils.js
   function escapeArg(s) {
     let result = "";
     result += `'`;
@@ -3369,7 +3369,7 @@
     return result;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/spawner.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/spawner.js
   var AdbNoneProtocolSpawner = class {
     #spawn;
     constructor(spawn) {
@@ -3392,7 +3392,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/service.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/service.js
   var AdbNoneProtocolSubprocessService = class extends AdbNoneProtocolSpawner {
     #adb;
     get adb() {
@@ -3422,7 +3422,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/features.js
+  // node_modules/@yume-chan/adb/esm/features.js
   var AdbFeature = {
     ShellV2: "shell_v2",
     Cmd: "cmd",
@@ -3435,7 +3435,7 @@
     DelayedAck: "delayed_ack"
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/shared.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/shared.js
   var AdbShellProtocolId = {
     Stdin: 0,
     Stdout: 1,
@@ -3449,7 +3449,7 @@
     data: buffer(u32)
   }, { littleEndian: true });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/process.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/process.js
   var AdbShellProtocolProcessImpl = class {
     #socket;
     #writer;
@@ -3534,7 +3534,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/pty.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/pty.js
   var AdbShellProtocolPtyProcess = class {
     #socket;
     #writer;
@@ -3602,7 +3602,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/spawner.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/spawner.js
   var AdbShellProtocolSpawner = class {
     #spawn;
     constructor(spawn) {
@@ -3635,7 +3635,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/service.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/service.js
   var AdbShellProtocolSubprocessService = class extends AdbShellProtocolSpawner {
     #adb;
     get adb() {
@@ -3672,7 +3672,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/service.js
+  // node_modules/@yume-chan/adb/esm/commands/subprocess/service.js
   var AdbSubprocessService = class {
     #adb;
     get adb() {
@@ -3695,7 +3695,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/response.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/response.js
   function encodeAsciiUnchecked(value) {
     const result = new Uint8Array(value.length);
     for (let i = 0; i < value.length; i += 1) {
@@ -3764,7 +3764,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/request.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/request.js
   var AdbSyncRequestId = {
     List: adbSyncEncodeId("LIST"),
     ListV2: adbSyncEncodeId("LIS2"),
@@ -3793,7 +3793,7 @@
     await writable.write(value);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/stat.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/stat.js
   var LinuxFileType = {
     Directory: 4,
     File: 8,
@@ -3908,7 +3908,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/list.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/list.js
   var AdbSyncEntryResponse = extend(AdbSyncLstatResponse, {
     name: string(u32)
   });
@@ -3961,7 +3961,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/pull.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/pull.js
   var AdbSyncDataResponse = struct({ data: buffer(u32) }, { littleEndian: true });
   async function* adbSyncPullGenerator(socket, path) {
     const locked = await socket.lock();
@@ -3988,7 +3988,7 @@
     return ReadableStream2.from(adbSyncPullGenerator(socket, path));
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/push.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/push.js
   var ADB_SYNC_MAX_PACKET_SIZE = 64 * 1024;
   var AdbSyncOkResponse = struct({ unused: u32 }, { littleEndian: true });
   async function pipeFileData(locked, file, packetSize, mtime) {
@@ -4060,7 +4060,7 @@
     return adbSyncPushV1(options);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/socket.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/socket.js
   var AdbSyncSocketLocked = class {
     #writer;
     #readable;
@@ -4130,7 +4130,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/sync.js
+  // node_modules/@yume-chan/adb/esm/commands/sync/sync.js
   function dirname(path) {
     const end = path.lastIndexOf("/");
     if (end === -1) {
@@ -4251,7 +4251,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/tcpip.js
+  // node_modules/@yume-chan/adb/esm/commands/tcpip.js
   function parsePort(value) {
     if (!value || value === "0") {
       return void 0;
@@ -4289,7 +4289,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/adb.js
+  // node_modules/@yume-chan/adb/esm/adb.js
   var Adb = class {
     #transport;
     get transport() {
@@ -4370,7 +4370,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/banner.js
+  // node_modules/@yume-chan/adb/esm/banner.js
   var AdbBannerKey = {
     Product: "ro.product.name",
     Model: "ro.product.model",
@@ -4445,7 +4445,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/crypto.js
+  // node_modules/@yume-chan/adb/esm/daemon/crypto.js
   function getBigUint(array, byteOffset, length) {
     let result = 0n;
     for (let j = 0; j < length % 8; j += 1) {
@@ -4633,7 +4633,7 @@
     return padded;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/packet.js
+  // node_modules/@yume-chan/adb/esm/daemon/packet.js
   var AdbCommand = {
     Auth: 1213486401,
     // 'AUTH'
@@ -4681,7 +4681,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/auth.js
+  // node_modules/@yume-chan/adb/esm/daemon/auth.js
   var AdbAuthType = {
     Token: 1,
     Signature: 2,
@@ -4773,7 +4773,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/socket.js
+  // node_modules/@yume-chan/adb/esm/daemon/socket.js
   var AdbDaemonSocketController = class {
     #dispatcher;
     localId;
@@ -4903,7 +4903,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/dispatcher.js
+  // node_modules/@yume-chan/adb/esm/daemon/dispatcher.js
   var AdbPacketDispatcher = class {
     // ADB socket id starts from 1
     // (0 means open failed)
@@ -5132,7 +5132,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/transport.js
+  // node_modules/@yume-chan/adb/esm/daemon/transport.js
   var ADB_DAEMON_VERSION_OMIT_CHECKSUM = 16777217;
   var ADB_DAEMON_DEFAULT_FEATURES = /* @__PURE__ */ (() => [
     AdbFeature.ShellV2,
@@ -5313,7 +5313,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/server/observer.js
+  // node_modules/@yume-chan/adb/esm/server/observer.js
   function unorderedRemove(array, index) {
     if (index < 0 || index >= array.length) {
       return;
@@ -5322,7 +5322,7 @@
     array.length -= 1;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/error.js
+  // node_modules/@yume-chan/adb-daemon-webusb/esm/error.js
   var DeviceBusyError = class extends Error {
     constructor(cause) {
       super("The device is already in used by another program", {
@@ -5331,7 +5331,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/utils.js
+  // node_modules/@yume-chan/adb-daemon-webusb/esm/utils.js
   function isErrorName(e, name) {
     return typeof e === "object" && e !== null && "name" in e && e.name === name;
   }
@@ -5422,7 +5422,7 @@
     return false;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/device.js
+  // node_modules/@yume-chan/adb-daemon-webusb/esm/device.js
   var AdbDefaultInterfaceFilter = {
     classCode: 255,
     subclassCode: 66,
@@ -5607,7 +5607,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/observer.js
+  // node_modules/@yume-chan/adb-daemon-webusb/esm/observer.js
   var AdbDaemonWebUsbDeviceObserver = class _AdbDaemonWebUsbDeviceObserver {
     static async create(usb, options = {}) {
       const devices = await usb.getDevices();
@@ -5673,7 +5673,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/manager.js
+  // node_modules/@yume-chan/adb-daemon-webusb/esm/manager.js
   var AdbDaemonWebUsbDeviceManager = class _AdbDaemonWebUsbDeviceManager {
     /**
      * Gets the instance of {@link AdbDaemonWebUsbDeviceManager} using browser WebUSB implementation.
@@ -5732,7 +5732,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-credential-web/esm/index.js
+  // node_modules/@yume-chan/adb-credential-web/esm/index.js
   function openDatabase() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open("Tango", 1);
@@ -5831,7 +5831,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/audio.js
+  // node_modules/@yume-chan/scrcpy/esm/base/audio.js
   var ScrcpyAudioCodec = class _ScrcpyAudioCodec {
     static Opus = /* @__PURE__ */ new _ScrcpyAudioCodec("opus", 1869641075, "audio/opus", "opus");
     static Aac = /* @__PURE__ */ new _ScrcpyAudioCodec("aac", 6381923, "audio/aac", "mp4a.66");
@@ -5852,7 +5852,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/control-message-type.js
+  // node_modules/@yume-chan/scrcpy/esm/base/control-message-type.js
   var ScrcpyControlMessageType = {
     InjectKeyCode: 0,
     InjectText: 1,
@@ -5874,7 +5874,7 @@
     ResetVideo: 17
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/device-message.js
+  // node_modules/@yume-chan/scrcpy/esm/base/device-message.js
   var ScrcpyDeviceMessageParsers = class {
     #parsers = [];
     get parsers() {
@@ -5915,7 +5915,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/option-value.js
+  // node_modules/@yume-chan/scrcpy/esm/base/option-value.js
   function isScrcpyOptionValue(value) {
     return typeof value === "object" && value !== null && "toOptionValue" in value && typeof value.toOptionValue === "function";
   }
@@ -5932,14 +5932,14 @@
     return value.toString();
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/video.js
+  // node_modules/@yume-chan/scrcpy/esm/base/video.js
   var ScrcpyVideoCodecId = {
     H264: 1748121140,
     H265: 1748121141,
     AV1: 6387249
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/index.js
   var impl_exports = {};
   __export(impl_exports, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage,
@@ -5973,7 +5973,7 @@
     setListDisplays: () => setListDisplays
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/key-event.js
+  // node_modules/@yume-chan/scrcpy/esm/android/key-event.js
   var AndroidKeyEventAction = {
     Down: 0,
     Up: 1
@@ -6156,7 +6156,7 @@
     AndroidPaste: 279
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/motion-event.js
+  // node_modules/@yume-chan/scrcpy/esm/android/motion-event.js
   var AndroidMotionEventAction = {
     Down: 0,
     Up: 1,
@@ -6183,16 +6183,16 @@
     StylusSecondary: 64
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/screen-power-mode.js
+  // node_modules/@yume-chan/scrcpy/esm/android/screen-power-mode.js
   var AndroidScreenPowerMode = {
     Off: 0,
     Normal: 2
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/empty.js
+  // node_modules/@yume-chan/scrcpy/esm/control/empty.js
   var EmptyControlMessage = struct({ type: u8 }, { littleEndian: false });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/inject-key-code.js
+  // node_modules/@yume-chan/scrcpy/esm/control/inject-key-code.js
   var ScrcpyInjectKeyCodeControlMessage = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.InjectKeyCode),
     action: u8(),
@@ -6201,10 +6201,10 @@
     metaState: u32()
   }, { littleEndian: false }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/inject-text.js
+  // node_modules/@yume-chan/scrcpy/esm/control/inject-text.js
   var ScrcpyInjectTextControlMessage = struct({ type: u8, text: string(u32) }, { littleEndian: false });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/message-type-map.js
+  // node_modules/@yume-chan/scrcpy/esm/control/message-type-map.js
   var ScrcpyControlMessageTypeMap = class {
     #types;
     constructor(options) {
@@ -6223,16 +6223,16 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/set-screen-power-mode.js
+  // node_modules/@yume-chan/scrcpy/esm/control/set-screen-power-mode.js
   var ScrcpySetDisplayPowerControlMessage = struct({ type: u8, mode: u8() }, { littleEndian: false });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/start-app.js
+  // node_modules/@yume-chan/scrcpy/esm/control/start-app.js
   var ScrcpyStartAppControlMessage = struct({
     type: u8,
     name: string(u8)
   }, { littleEndian: false });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/uhid.js
+  // node_modules/@yume-chan/scrcpy/esm/control/uhid.js
   var ScrcpyUHidInputControlMessage = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.UHidInput),
     id: u16,
@@ -6240,7 +6240,7 @@
   }, { littleEndian: false }))();
   var ScrcpyUHidDestroyControlMessage = struct({ type: u8, id: u16 }, { littleEndian: false });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/serializer.js
+  // node_modules/@yume-chan/scrcpy/esm/control/serializer.js
   var ScrcpyControlMessageSerializer = class {
     #options;
     #typeMap;
@@ -6343,7 +6343,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/writer.js
+  // node_modules/@yume-chan/scrcpy/esm/control/writer.js
   var ScrcpyControlMessageWriter = class {
     #writer;
     #serializer;
@@ -6428,7 +6428,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/back-or-screen-on.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/back-or-screen-on.js
   var BackOrScreenOnControlMessage = EmptyControlMessage;
   function serializeBackOrScreenOnControlMessage(message) {
     if (message.action === AndroidKeyEventAction.Down) {
@@ -6437,7 +6437,7 @@
     return void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/clipboard-stream.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/clipboard-stream.js
   var ClipboardDeviceMessage = struct({ content: string(u32) }, { littleEndian: false });
   var ClipboardStream = class extends PushReadableStream {
     #controller;
@@ -6461,7 +6461,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/control-message-types.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/control-message-types.js
   var ControlMessageTypes = /* @__PURE__ */ (() => [
     /*  0 */
     ScrcpyControlMessageType.InjectKeyCode,
@@ -6487,7 +6487,7 @@
     ScrcpyControlMessageType.RotateDevice
   ])();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/init.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/init.js
   var VideoOrientation = {
     Unlocked: -1,
     Portrait: 0,
@@ -6548,7 +6548,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/defaults.js
   var Defaults = {
     logLevel: "debug",
     maxSize: 0,
@@ -6565,7 +6565,7 @@
     codecOptions: void 0
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/clamp.js
+  // node_modules/@yume-chan/scrcpy/esm/utils/clamp.js
   function clamp(value, min, max) {
     if (value < min) {
       return min;
@@ -6576,16 +6576,16 @@
     return value;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/constants.js
+  // node_modules/@yume-chan/scrcpy/esm/utils/constants.js
   var DefaultServerPath = "/data/local/tmp/scrcpy-server.jar";
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/omit.js
+  // node_modules/@yume-chan/scrcpy/esm/utils/omit.js
   // @__NO_SIDE_EFFECTS__
   function omit(value, ...keys) {
     return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/inject-touch.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/inject-touch.js
   var UnsignedFloat = field(2, "byob", (source, { buffer: buffer2, index, littleEndian }) => {
     source = clamp(source, -1, 1);
     source = source === 1 ? 65535 : source * 65536;
@@ -6616,7 +6616,7 @@
     return InjectTouchControlMessage.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/media-stream-transformer.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/media-stream-transformer.js
   var MediaStreamRawPacket = struct({ pts: u64, data: buffer(u32) }, { littleEndian: false });
   var PtsConfig = 1n << 63n;
   function createMediaStreamTransformer(options) {
@@ -6652,7 +6652,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-display.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-display.js
   function parseDisplay(line) {
     const match = line.match(/^\s+scrcpy --display (\d+)$/);
     if (match) {
@@ -6663,7 +6663,7 @@
     return void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-video-stream-metadata.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-video-stream-metadata.js
   async function readString(stream, maxLength) {
     const buffer2 = await stream.readExactly(maxLength);
     return decodeUtf8(buffer2.subarray(0, buffer2.indexOf(0)));
@@ -6687,7 +6687,7 @@
     return { stream: buffered.release(), metadata };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/scroll-controller.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/scroll-controller.js
   var InjectScrollControlMessage = struct({
     type: u8,
     pointerX: u32,
@@ -6738,7 +6738,7 @@
     return new ScrollController();
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize-order.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize-order.js
   var SerializeOrder = [
     "logLevel",
     "maxSize",
@@ -6755,23 +6755,23 @@
     "codecOptions"
   ];
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize.js
   function serialize(options, order) {
     return order.map((key) => toScrcpyOptionValue(options[key], "-"));
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-clipboard.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-clipboard.js
   var SetClipboardControlMessage = struct({ type: u8, content: string(u32) }, { littleEndian: false });
   function serializeSetClipboardControlMessage(message) {
     return SetClipboardControlMessage.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-list-display.js
+  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-list-display.js
   function setListDisplays(options) {
     options.displayId = -1;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/index.js
   var impl_exports2 = {};
   __export(impl_exports2, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage,
@@ -6808,13 +6808,13 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/defaults.js
   var Defaults2 = /* @__PURE__ */ (() => ({
     ...impl_exports.Defaults,
     encoderName: void 0
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/parse-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/parse-encoder.js
   function parseEncoder(line, encoderNameRegex) {
     const match = line.match(encoderNameRegex);
     if (match) {
@@ -6824,18 +6824,18 @@
   }
   var EncoderRegex = /^\s+scrcpy --encoder-name '([^']+)'$/;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/serialize-order.js
+  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/serialize-order.js
   var SerializeOrder2 = /* @__PURE__ */ (() => [
     ...impl_exports.SerializeOrder,
     "encoderName"
   ])();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/set-list-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/set-list-encoder.js
   function setListEncoders(options) {
     options.encoderName = "_";
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/index.js
   var impl_exports3 = {};
   __export(impl_exports3, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage2,
@@ -6872,20 +6872,20 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/back-or-screen-on.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/back-or-screen-on.js
   var BackOrScreenOnControlMessage2 = extend(impl_exports2.BackOrScreenOnControlMessage, { action: u8() });
   function serializeBackOrScreenOnControlMessage2(message) {
     return BackOrScreenOnControlMessage2.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/control-message-types.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/control-message-types.js
   var ControlMessageTypes2 = /* @__PURE__ */ (() => {
     const result = impl_exports2.ControlMessageTypes.slice();
     result.splice(6, 0, ScrcpyControlMessageType.ExpandSettingPanel);
     return result;
   })();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/init.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/init.js
   var VideoOrientation2 = {
     Initial: -2,
     Unlocked: -1,
@@ -6895,7 +6895,7 @@
     LandscapeFlipped: 3
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/defaults.js
   var Defaults3 = /* @__PURE__ */ (() => ({
     ...impl_exports2.Defaults,
     logLevel: "debug",
@@ -6903,16 +6903,16 @@
     powerOffOnClose: false
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/parse-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/parse-encoder.js
   var EncoderRegex2 = /^\s+scrcpy --encoder '([^']+)'$/;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/serialize-order.js
+  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/serialize-order.js
   var SerializeOrder3 = /* @__PURE__ */ (() => [
     ...impl_exports2.SerializeOrder,
     "powerOffOnClose"
   ])();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/index.js
   var impl_exports4 = {};
   __export(impl_exports4, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -6951,16 +6951,16 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/defaults.js
   var Defaults4 = /* @__PURE__ */ (() => ({
     ...impl_exports3.Defaults,
     clipboardAutosync: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/parse-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/parse-encoder.js
   var EncoderRegex3 = /^\s+scrcpy --encoder-name '([^']+)'$/;
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/serialize.js
+  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/serialize.js
   function toSnakeCase(input) {
     return input.replace(/([A-Z])/g, "_$1").toLowerCase();
   }
@@ -6980,7 +6980,7 @@
     return result;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/set-clipboard.js
+  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/set-clipboard.js
   var AckClipboardDeviceMessage = struct({ sequence: u64 }, { littleEndian: false });
   var SetClipboardControlMessage2 = struct({
     type: u8,
@@ -7030,7 +7030,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/index.js
   var impl_exports5 = {};
   __export(impl_exports5, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7069,7 +7069,7 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/defaults.js
   var Defaults5 = /* @__PURE__ */ (() => ({
     ...impl_exports4.Defaults,
     downsizeOnError: true,
@@ -7077,7 +7077,7 @@
     sendDummyByte: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/parse-video-stream-metadata.js
+  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/parse-video-stream-metadata.js
   async function parseVideoStreamMetadata2(options, stream) {
     if (!options.sendDeviceMeta) {
       return { stream, metadata: { codec: ScrcpyVideoCodecId.H264 } };
@@ -7086,7 +7086,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/scroll-controller.js
+  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/scroll-controller.js
   var InjectScrollControlMessage2 = extend(impl_exports4.InjectScrollControlMessage, { buttons: s32 });
   var ScrollController2 = class extends impl_exports4.ScrollController {
     serializeScrollMessage(message) {
@@ -7101,7 +7101,7 @@
     return new ScrollController2();
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/index.js
   var impl_exports6 = {};
   __export(impl_exports6, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7141,13 +7141,13 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/defaults.js
   var Defaults6 = /* @__PURE__ */ (() => ({
     ...impl_exports5.Defaults,
     cleanup: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/media-stream-transformer.js
+  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/media-stream-transformer.js
   var PtsKeyframe = 1n << 62n;
   function createMediaStreamTransformer2(options) {
     if (!options.sendFrameMeta) {
@@ -7192,13 +7192,13 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_24/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/1_24/impl/defaults.js
   var Defaults7 = /* @__PURE__ */ (() => ({
     ...impl_exports6.Defaults,
     powerOn: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_25/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/1_25/impl/index.js
   var impl_exports7 = {};
   __export(impl_exports7, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7239,7 +7239,7 @@
     setListEncoders: () => setListEncoders
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_25/impl/scroll-controller.js
+  // node_modules/@yume-chan/scrcpy/esm/1_25/impl/scroll-controller.js
   var SignedFloat = field(2, "byob", (value, { buffer: buffer2, index, littleEndian }) => {
     value = clamp(value, -1, 1);
     value = value === 1 ? 32767 : value * 32768;
@@ -7268,7 +7268,7 @@
     return new ScrollController3();
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/index.js
   var impl_exports8 = {};
   __export(impl_exports8, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7311,7 +7311,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/defaults.js
   var Defaults8 = /* @__PURE__ */ (() => ({
     ...omit(impl_exports7.Defaults, "bitRate", "codecOptions", "encoderName"),
     scid: void 0,
@@ -7329,7 +7329,7 @@
     sendCodecMeta: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/init.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/init.js
   var InstanceId = class _InstanceId {
     static NONE = /* @__PURE__ */ new _InstanceId(-1);
     static random() {
@@ -7347,7 +7347,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/inject-touch.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/inject-touch.js
   var InjectTouchControlMessage2 = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.InjectTouch),
     action: u8(),
@@ -7364,7 +7364,7 @@
     return InjectTouchControlMessage2.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-audio-stream-metadata.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-audio-stream-metadata.js
   async function parseAudioStreamMetadata(stream, options) {
     const buffered = new BufferedReadableStream(stream);
     const buffer2 = await buffered.readExactly(4);
@@ -7438,7 +7438,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-display.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-display.js
   function parseDisplay2(line) {
     const match = line.match(/^\s+--display=(\d+)\s+\(([^)]+)\)$/);
     if (match) {
@@ -7453,7 +7453,7 @@
     return void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-encoder.js
   var EncoderRegex4 = /^\s+--(video|audio)-codec=(\S+)\s+--\1-encoder='([^']+)'$/;
   function parseEncoder2(line) {
     const match = line.match(EncoderRegex4);
@@ -7464,7 +7464,7 @@
     } : void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-video-stream-metadata.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-video-stream-metadata.js
   function toCodecId(codec) {
     switch (codec) {
       case "h264":
@@ -7508,17 +7508,17 @@
     return parseAsync(options, stream);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-display.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-display.js
   function setListDisplays2(options) {
     options.listDisplays = true;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-encoder.js
   function setListEncoders2(options) {
     options.listEncoders = true;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_1/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_1/impl/index.js
   var impl_exports9 = {};
   __export(impl_exports9, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7561,14 +7561,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_1/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/2_1/impl/defaults.js
   var Defaults9 = /* @__PURE__ */ (() => ({
     ...impl_exports8.Defaults,
     video: true,
     audioSource: "output"
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_2/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/2_2/impl/defaults.js
   var Defaults10 = /* @__PURE__ */ (() => ({
     ...impl_exports9.Defaults,
     videoSource: "display",
@@ -7583,7 +7583,7 @@
     listCameraSizes: false
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_2/impl/parse-display.js
+  // node_modules/@yume-chan/scrcpy/esm/2_2/impl/parse-display.js
   function parseDisplay3(line) {
     const match = line.match(/^\s+--display-id=(\d+)\s+\(([^)]+)\)$/);
     if (match) {
@@ -7598,7 +7598,7 @@
     return void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_3/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_3/impl/index.js
   var impl_exports10 = {};
   __export(impl_exports10, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7641,7 +7641,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/index.js
   var impl_exports11 = {};
   __export(impl_exports11, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7688,7 +7688,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/control-message-types.js
+  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/control-message-types.js
   var ControlMessageTypes3 = /* @__PURE__ */ (() => [
     ...impl_exports10.ControlMessageTypes,
     ScrcpyControlMessageType.UHidCreate,
@@ -7696,7 +7696,7 @@
     ScrcpyControlMessageType.OpenHardKeyboardSettings
   ])();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/serialize-uhid-create.js
+  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/serialize-uhid-create.js
   var UHidCreateControlMessage = struct({
     type: u8,
     id: u16,
@@ -7706,7 +7706,7 @@
     return UHidCreateControlMessage.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/uhid-output-stream.js
+  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/uhid-output-stream.js
   var UHidOutputDeviceMessage = struct({
     id: u16,
     data: buffer(u16)
@@ -7733,7 +7733,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_6/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_6/impl/index.js
   var impl_exports12 = {};
   __export(impl_exports12, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7780,13 +7780,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_6/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/2_6/impl/defaults.js
   var Defaults11 = /* @__PURE__ */ (() => ({
     ...impl_exports11.Defaults,
     audioDup: false
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/index.js
   var impl_exports13 = {};
   __export(impl_exports13, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7833,14 +7833,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/control-message-types.js
+  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/control-message-types.js
   var ControlMessageTypes4 = /* @__PURE__ */ (() => {
     const result = impl_exports12.ControlMessageTypes.slice();
     result.splice(14, 0, ScrcpyControlMessageType.UHidDestroy);
     return result;
   })();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/serialize-uhid-create.js
+  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/serialize-uhid-create.js
   var UHidCreateControlMessage2 = struct({
     type: u8,
     id: u16,
@@ -7851,7 +7851,7 @@
     return UHidCreateControlMessage2.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/index.js
   var impl_exports14 = {};
   __export(impl_exports14, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7902,14 +7902,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/control-message-types.js
+  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/control-message-types.js
   var ControlMessageTypes5 = /* @__PURE__ */ (() => [
     ...impl_exports13.ControlMessageTypes,
     ScrcpyControlMessageType.StartApp,
     ScrcpyControlMessageType.ResetVideo
   ])();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/defaults.js
   var Defaults12 = /* @__PURE__ */ (() => ({
     ...omit(impl_exports13.Defaults, "lockVideoOrientation"),
     captureOrientation: void 0,
@@ -7920,7 +7920,7 @@
     vdSystemDecorations: true
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/init.js
+  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/init.js
   var LockOrientation = {
     Unlocked: 0,
     LockedInitial: 1,
@@ -7983,7 +7983,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/parse-encoder.js
+  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/parse-encoder.js
   var EncoderRegex5 = /^\s+--(video|audio)-codec=(\S+)\s+--\1-encoder=(\S+)(?:\s*\((sw|hw|hybrid)\))?(?:\s*\[vendor\])?(?:\s*\(alias for (\S+)\))?$/;
   function toHardwareType(value) {
     switch (value) {
@@ -8009,7 +8009,7 @@
     } : void 0;
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/index.js
   var impl_exports15 = {};
   __export(impl_exports15, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -8060,13 +8060,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/defaults.js
   var Defaults13 = /* @__PURE__ */ (() => ({
     ...impl_exports14.Defaults,
     vdDestroyContent: false
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/serialize-uhid-create.js
+  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/serialize-uhid-create.js
   var UHidCreateControlMessage3 = struct({
     type: u8,
     id: u16,
@@ -8079,7 +8079,7 @@
     return UHidCreateControlMessage3.serialize(message);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_2/impl/index.js
+  // node_modules/@yume-chan/scrcpy/esm/3_2/impl/index.js
   var impl_exports16 = {};
   __export(impl_exports16, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -8130,13 +8130,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_2/impl/defaults.js
+  // node_modules/@yume-chan/scrcpy/esm/3_2/impl/defaults.js
   var Defaults14 = /* @__PURE__ */ (() => ({
     ...impl_exports15.Defaults,
     displayImePolicy: void 0
   }))();
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_3_1/impl/scroll-controller.js
+  // node_modules/@yume-chan/scrcpy/esm/3_3_1/impl/scroll-controller.js
   var ScrollController4 = class {
     serializeScrollMessage(message) {
       message = {
@@ -8151,7 +8151,7 @@
     return new ScrollController4();
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_3_1/options.js
+  // node_modules/@yume-chan/scrcpy/esm/3_3_1/options.js
   var ScrcpyOptions3_3_1 = class {
     static Defaults = Defaults14;
     value;
@@ -8228,7 +8228,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/av1.js
+  // node_modules/@yume-chan/scrcpy/esm/codec/av1.js
   var AndroidAv1Profile = {
     Main8: 1 << 0,
     Main10: 1 << 1,
@@ -8819,7 +8819,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/nalu.js
+  // node_modules/@yume-chan/scrcpy/esm/codec/nalu.js
   function* annexBSplitNalu(buffer2) {
     let start = -1;
     let zeroCount = 0;
@@ -9030,7 +9030,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/h264.js
+  // node_modules/@yume-chan/scrcpy/esm/codec/h264.js
   var AndroidAvcProfile = {
     Baseline: 1 << 0,
     Main: 1 << 1,
@@ -9231,7 +9231,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/h265.js
+  // node_modules/@yume-chan/scrcpy/esm/codec/h265.js
   var AndroidHevcProfile = {
     Main: 1 << 0,
     Main10: 1 << 1,
@@ -10227,7 +10227,7 @@
     };
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/connection.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/connection.js
   var SCRCPY_SOCKET_NAME_PREFIX = "scrcpy";
   var AdbScrcpyConnection = class {
     adb;
@@ -10340,7 +10340,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/video.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/video.js
   var AdbScrcpyVideoStream = class {
     #options;
     #metadata;
@@ -10410,7 +10410,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/client.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/client.js
   function arrayToStream(array) {
     return new PushReadableStream(async (controller) => {
       for (const item of array) {
@@ -10648,7 +10648,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/1_15/impl/get-displays.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/1_15/impl/get-displays.js
   async function getDisplays(adb, path, options) {
     try {
       const client = await AdbScrcpyClient.start(adb, path, options);
@@ -10672,7 +10672,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/2_0/impl/get-encoders.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/2_0/impl/get-encoders.js
   async function getEncoders(adb, path, options) {
     try {
       const client = await AdbScrcpyClient.start(adb, path, options);
@@ -10696,7 +10696,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/2_1/impl/create-connection.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/2_1/impl/create-connection.js
   function createConnection(adb, options) {
     const connectionOptions = {
       scid: toScrcpyOptionValue(options.scid, void 0),
@@ -10712,7 +10712,7 @@
     }
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/3_3_3.js
+  // node_modules/@yume-chan/adb-scrcpy/esm/3_3_3.js
   var AdbScrcpyOptions3_3_3 = class extends ScrcpyOptions3_3_1 {
     version;
     spawner;
@@ -10732,7 +10732,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/utils.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/utils.js
   function hexDigits(value) {
     return value.toString(16).toUpperCase();
   }
@@ -10743,7 +10743,7 @@
     return value.toString(10).padStart(2, "0");
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/av1.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/av1.js
   var Av1Codec = class {
     #decoder;
     #updateSize;
@@ -10828,7 +10828,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h26x.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h26x.js
   var H26xDecoder = class {
     #decoder;
     #config;
@@ -10888,7 +10888,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h264.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h264.js
   var H264Decoder = class extends H26xDecoder {
     #updateSize;
     #options;
@@ -10909,7 +10909,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h265.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h265.js
   var H265Decoder = class extends H26xDecoder {
     #updateSize;
     #options;
@@ -10939,7 +10939,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/pool.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/pool.js
   var Pool = class {
     #controller;
     #readable = new ReadableStream({
@@ -10970,7 +10970,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/snapshot.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/snapshot.js
   var VideoFrameCapturer = class {
     #canvas;
     #context;
@@ -11009,7 +11009,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/decoder.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/decoder.js
   var VideoFrameCapturerPool = /* @__PURE__ */ new Pool(() => new VideoFrameCapturer(), 4);
   var WebCodecsVideoDecoder = class {
     static get isSupported() {
@@ -11175,11 +11175,11 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
+  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
   var import_yuv_buffer = __toESM(require_yuv_buffer(), 1);
   var import_yuv_canvas = __toESM(require_yuv_canvas(), 1);
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/wrapper.js
+  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/wrapper.js
   var import_meta = {};
   var worker;
   var workerReady = false;
@@ -11256,7 +11256,7 @@
     return Promise.resolve(decoder);
   }
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
+  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
   var noop2 = () => {
   };
   function createCanvas() {
@@ -11383,7 +11383,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/canvas.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/canvas.js
   var CanvasVideoFrameRenderer = class {
     #canvas;
     get canvas() {
@@ -11404,7 +11404,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/bitmap.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/bitmap.js
   var BitmapVideoFrameRenderer = class extends CanvasVideoFrameRenderer {
     #context;
     constructor(canvas) {
@@ -11419,7 +11419,7 @@
     }
   };
 
-  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/webgl.js
+  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/webgl.js
   var Resolved = Promise.resolve();
   function createContext(canvas, enableCapture) {
     const attributes = {
