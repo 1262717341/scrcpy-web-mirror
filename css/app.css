@@ -91,16 +91,23 @@ body.mirroring .hud-live i { background: var(--accent); box-shadow: 0 0 10px rgb
 .hud-bl span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; }
 
 /* HUD DOCK：读数收进侧栏最底下的一条浮条，画面里彻底不放数字 */
+/* HUD DOCK：作为侧栏卡片的底栏，与抽屉同一张卡、同一套边框；flex 排开不重叠 */
 .hud-dock {
-  position: absolute; z-index: 36; left: 88px; width: 300px; bottom: 12px;
+  position: relative; z-index: 31; left: auto; right: auto; bottom: auto;
+  flex: 0 0 auto; margin-top: auto;
   display: flex; flex-direction: column; gap: 2px;
-  padding: 8px 10px; border: 1px solid var(--line);
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(16,19,24,.62), rgba(9,11,14,.94));
-  backdrop-filter: blur(16px);
-  pointer-events: none; opacity: 0; transition: opacity .18s;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong); border-top: 1px solid var(--line);
+  border-radius: 0 0 13px 13px;
+  background: var(--panel);
+  backdrop-filter: blur(20px);
+  pointer-events: none; opacity: 1; transition: opacity .18s;
 }
-body.mirroring .hud-dock { opacity: 1; }
+/* 未连接时也把条目列出来，数值先显示占位「—」，连上再填真实数据 */
+body:not(.mirroring) .hud-dock { opacity: .72; }
+.app.focus-mode .hud-dock { display: none; }
+/* 没有任何抽屉、也没在投屏时，不单独留一条空条 */
+.app:not(.drawer-open):not(.mirroring) .hud-dock { display: none; }
 .app.focus-mode .hud-dock { display: none; }
 .hud-dock .hud {
   position: static; left: auto; right: auto; top: auto; bottom: auto;
@@ -115,8 +122,19 @@ body.mirroring .hud-dock { opacity: 1; }
 .hud-dock .hud-tl, .hud-dock .hud-bl { flex-wrap: nowrap; }
 .hud-dock .hud-sub { flex: none; }
 .hud-dock .hud-live b { color: var(--accent); }
-/* 抽屉内容给底部浮条让位，末项不会被盖住 */
-.side-left .drawer-body { padding-bottom: 84px; }
+/* 侧栏：抽屉占满剩余高度，读数条作为同一张卡片的底栏排在最下面（不再浮在内容上） */
+.side-left, .side-right { flex-direction: column; }
+.side-left > .drawer, .side-right > .drawer {
+  flex: 1 1 auto; min-height: 0; max-height: none;
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.app.drawer-open .side-left > .drawer,
+.app.drawer-open .side-right > .drawer { height: auto; }
+/* 没开抽屉时读数条单独成一张卡 */
+.side-left:not(:has(.drawer.is-open)) .hud-dock,
+.side-right:not(:has(.drawer.is-open)) .hud-dock {
+  border-radius: 13px; border-top-color: var(--line-strong);
+}
 
 
 /* 左侧工具轨 */
@@ -145,8 +163,6 @@ body.mirroring .hud-dock { opacity: 1; }
 .rail-btn.is-danger:hover { background: rgba(238,107,110,.08); color: var(--danger); }
 .rail-btn.is-stop-server { border-color: rgba(238,107,110,.3); background: rgba(238,107,110,.09); color: #ef8588; }
 .rail-btn.is-stop-server:hover { background: rgba(238,107,110,.18); color: #ff9fa2; }
-.rail-btn.is-guide-alert { border-color: rgba(240,192,103,.32); background: rgba(240,192,103,.09); color: #f0c067; }
-.rail-btn.is-guide-alert:hover { background: rgba(240,192,103,.17); color: #ffd58f; }
 .rail-btn:focus-visible, .btn:focus-visible, .cbtn:focus-visible, .mode-card:focus-visible, .focus-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* 悬浮抽屉 */
@@ -395,7 +411,9 @@ body { font-size: 14px; }
 @media (max-width: 760px) {
   .app.drawer-open .rail { border-top-color: transparent; border-radius: 0 0 12px 12px; }
   .app.drawer-open .side-left, .app.drawer-open .side-right { bottom: 72px; }
-  .app.drawer-open .drawer { height: 100%; border-radius: 13px 13px 0 0; }
+  .app.drawer-open .drawer { height: auto; border-radius: 13px 13px 0 0; }
+  .app.drawer-open .side-left > .drawer,
+  .app.drawer-open .side-right > .drawer { border-radius: 13px 13px 0 0; }
 }
 
 @media (max-height: 760px) and (min-width: 761px) {
@@ -407,7 +425,6 @@ body { font-size: 14px; }
 @media (max-width: 1100px) and (min-width: 761px) {
   .side-left { width: 286px; }
   .side-right { width: 286px; }
-  .hud-dock { width: 286px; }
 }
 @media (max-width: 760px) {
   .rail { top: auto; right: 8px; bottom: 8px; left: 8px; width: auto; height: 64px; flex-direction: row; align-items: center; gap: 4px; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; border-radius: 12px; }
@@ -421,8 +438,8 @@ body { font-size: 14px; }
   :root { --hud-gap: 34px; }
   .hud-sub { display: none; }
   .hud-metric b { max-width: 130px; }
-  /* 窄屏：读数条贴底部工具轨上方，整宽横排 */
-  .hud-dock { left: 8px; right: 8px; width: auto; bottom: 81px; padding: 7px 10px; }
+  /* 窄屏：读数条跟侧栏同宽，排在抽屉下面 */
+  .hud-dock { padding: 7px 12px; }
   .hud-dock .hud { font-size: 9px; }
   .hud-dock .hud-sub { display: inline; }
   .ph-title { font-size: 24px; }

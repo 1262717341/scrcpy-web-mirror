@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" type="image/x-icon" href="./assets/custom-icon.ico" />
-    <link rel="stylesheet" href="./css/app.css?v=4.0.12-ui14" />
+    <link rel="stylesheet" href="./css/app.css?v=4.0.12-ui19" />
   </head>
   <body>
     <div class="app" id="app">
@@ -18,7 +18,7 @@
         <main class="stage" id="stage">
           <div class="placeholder" id="placeholder">
             <div class="ph-frame" aria-hidden="true"><span class="ph-pulse"></span><span class="ph-bar"></span></div>
-            <p class="ph-kicker">STANDBY <i>/</i> 待机</p>
+            <p class="ph-kicker">待机</p>
             <h2 class="ph-title" id="placeholder-text">等待画面</h2>
             <p class="ph-sub">手机画面将按整块屏幕自动适配</p>
             <button class="btn primary lg" id="btn-start-2" type="button">
@@ -29,7 +29,7 @@
 
           <div class="stage-offline" id="stage-offline" hidden>
             <div class="stage-offline-card">
-              <span class="stage-offline-badge">SIGNAL LOST / 已断开</span>
+              <span class="stage-offline-badge">已断开</span>
               <p class="stage-offline-title">连接已断开</p>
               <p class="stage-offline-desc" id="stage-offline-desc">可重新连接设备</p>
               <button class="btn primary" id="btn-stage-reconnect" type="button">重新连接</button>
@@ -68,21 +68,22 @@
           <button class="rail-btn" id="btn-screenshot" type="button" title="截取当前画面" aria-label="截取画面">
             <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg><small>截屏</small>
           </button>
+          <button class="rail-btn" id="btn-focus" type="button" aria-label="沉浸" aria-pressed="false" title="沉浸 (I)">
+            <svg viewBox="0 0 24 24"><path d="M3 9V4h5M21 9V4h-5M3 15v5h5M21 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg><small>沉浸</small>
+          </button>
           <button class="rail-btn is-accent" id="btn-fullscreen" type="button" title="全屏 (H)" aria-label="全屏">
             <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="rl">全屏</span>
+          </button>
+
+          <span class="rail-spacer" aria-hidden="true"></span>
+          <span class="rail-rule" aria-hidden="true"></span>
+
+          <button class="rail-btn" id="btn-show-guide" type="button" title="使用指南" aria-label="使用指南">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2.2-2.5 3.7"/><path d="M12 17h.01"/></svg><small>指南</small>
           </button>
           <button class="rail-btn" data-drawer="appearance" type="button" aria-label="皮肤与侧栏" aria-expanded="false" title="皮肤 · 侧栏">
             <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18h1.2a2 2 0 0 0 1.4-3.4 1.8 1.8 0 0 1 1.3-3H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="10" r=".8"/><circle cx="10" cy="6.8" r=".8"/><circle cx="14" cy="6.8" r=".8"/><circle cx="17" cy="9.5" r=".8"/></svg><small>皮肤</small>
           </button>
-          <button class="rail-btn" id="btn-show-guide" type="button" title="使用指南" aria-label="使用指南">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2.2-2.5 3.7"/><path d="M12 17h.01"/></svg><small>指南</small>
-          </button>
-          <button class="rail-btn" id="btn-focus" type="button" aria-label="沉浸模式" aria-pressed="false" title="沉浸模式 (I)">
-            <svg viewBox="0 0 24 24"><path d="M3 9V4h5M21 9V4h-5M3 15v5h5M21 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg><small>沉浸模式</small>
-          </button>
-
-          <span class="rail-rule" aria-hidden="true"></span>
-
           <button class="rail-btn is-danger" id="btn-stop" type="button" title="停止投屏 (Shift+Esc)" aria-label="停止投屏">
             <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><small>停止投屏</small>
           </button>
@@ -98,7 +99,7 @@
               <div><span class="drawer-index">01</span><h2>连接 · 画质</h2></div>
             </header>
             <div class="drawer-body">
-              <p class="section-kicker">CONNECTION MODE</p>
+              <p class="section-kicker">连接方式</p>
               <div class="mode-cards" id="mode-switch">
                 <button class="mode-card active" data-mode="usb" type="button">
                   <svg viewBox="0 0 24 24"><path d="M12 2v14"/><path d="M9 6l3-4 3 4"/><rect x="8" y="16" width="8" height="6" rx="2"/></svg>
@@ -148,15 +149,15 @@
                 </div>
               </div>
 
-              <p class="section-kicker">STREAM <i>自动保存</i></p>
+              <p class="section-kicker">画面参数 <i>自动保存</i></p>
               <div class="form-grid">
                 <label class="field"><span>分辨率</span><select id="opt-res" class="input"><option value="0">原始（高负载）</option><option value="1920">1920</option><option value="1600">1600</option><option value="1280" selected>1280</option><option value="1024">1024</option><option value="800">800</option></select></label>
-                <label class="field"><span>FPS</span><select id="opt-fps" class="input"><option value="0">不限（易卡顿）</option><option value="120">120</option><option value="60" selected>60</option><option value="30">30</option><option value="15">15</option></select></label>
+                <label class="field"><span>帧率</span><select id="opt-fps" class="input"><option value="0">不限（易卡顿）</option><option value="120">120</option><option value="60" selected>60</option><option value="30">30</option><option value="15">15</option></select></label>
                 <label class="field"><span>码率 Mbps</span><select id="opt-bitrate" class="input"><option value="32">32</option><option value="16">16</option><option value="8" selected>8</option><option value="4">4</option><option value="2">2</option></select></label>
                 <label class="field"><span>视频源</span><select id="opt-source" class="input"><option value="display">屏幕镜像</option><option value="camera_front">前摄像头</option><option value="camera_back">后摄像头</option></select></label>
                 <label class="field wide"><span>声音输出</span><select id="opt-audio-mode" class="input"><option value="both">手机 + 电脑（推荐）</option><option value="phone">仅手机（电脑无声）</option><option value="pc">仅电脑（手机静音）</option></select></label>
               </div>
-              <p class="section-kicker">BEHAVIOR</p>
+              <p class="section-kicker">附加设置</p>
               <div class="switch-list">
                 <label class="switch"><input type="checkbox" id="opt-awake" /><i></i><span>保持唤醒</span></label>
                 <label class="switch"><input type="checkbox" id="opt-screen-off-start" /><i></i><span>启动时关闭屏幕</span></label>
@@ -171,7 +172,7 @@
               <div><span class="drawer-index">04</span><h2>皮肤 · 侧栏</h2></div>
             </header>
             <div class="drawer-body">
-              <p class="section-kicker">THEME PRESETS <i>自动保存</i></p>
+              <p class="section-kicker">皮肤预设 <i>自动保存</i></p>
               <div class="skin-presets" id="skin-presets" aria-label="皮肤预设">
                 <button class="skin-preset active" type="button" data-skin="warm"><i style="--swatch:#d8b37a"></i><span>暖钨</span></button>
                 <button class="skin-preset" type="button" data-skin="mint"><i style="--swatch:#79c9b6"></i><span>薄荷</span></button>
@@ -182,7 +183,7 @@
                 <label class="skin-color"><span>强调色</span><span class="color-control"><input id="skin-accent" type="color" value="#d8b37a" /><output id="skin-accent-value">#D8B37A</output></span></label>
                 <label class="skin-color"><span>背景色</span><span class="color-control"><input id="skin-bg" type="color" value="#080a0c" /><output id="skin-bg-value">#080A0C</output></span></label>
               </div>
-              <p class="section-kicker">SIDEBAR POSITION</p>
+              <p class="section-kicker">侧栏位置</p>
               <div class="sidebar-switch" role="group" aria-label="侧栏位置">
                 <button class="active" type="button" data-sidebar="left" aria-pressed="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>左侧</span></button>
                 <button type="button" data-sidebar="right" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span>右侧</span></button>
@@ -201,14 +202,14 @@
             </header>
             <div class="drawer-body">
               <div class="ctrl-grid">
-                <span class="ctrl-label">导航 / NAV</span>
+                <span class="ctrl-label">导航</span>
                 <div class="ctrl-row cols2">
                   <button class="cbtn" data-act="back" type="button"><span class="lbl3">返回</span></button>
                   <button class="cbtn" data-act="home" type="button"><span class="lbl3">主页</span></button>
                   <button class="cbtn" data-act="recents" type="button"><span class="lbl3">多任务</span></button>
                   <button class="cbtn" data-act="menu" type="button"><span class="lbl3">菜单</span></button>
                 </div>
-                <span class="ctrl-label">系统 / SYSTEM</span>
+                <span class="ctrl-label">系统</span>
                 <div class="ctrl-row">
                   <button class="cbtn" data-act="power" type="button"><span class="lbl3">电源</span></button>
                   <button class="cbtn" data-act="vol-up" type="button"><span class="lbl3">音量加</span></button>
@@ -222,14 +223,14 @@
                   <button class="cbtn" data-act="phone-shot" type="button"><span class="lbl3">手机截屏</span></button>
                   <button class="cbtn" data-act="pc-shot" type="button"><span class="lbl3">电脑截屏</span></button>
                 </div>
-                <span class="ctrl-label">画面旋转 / ORIENTATION</span>
+                <span class="ctrl-label">画面旋转</span>
                 <div class="ctrl-row">
                   <button class="cbtn" data-act="rot-l" type="button"><span class="lbl3">左旋</span></button>
                   <button class="cbtn" data-act="rot-0" type="button"><span class="lbl3">回正</span></button>
                   <button class="cbtn" data-act="rot-r" type="button"><span class="lbl3">右旋</span></button>
                 </div>
               </div>
-              <p class="section-kicker">TEXT INPUT</p>
+              <p class="section-kicker">文本输入</p>
               <div class="text-send">
                 <input id="clipboard-input" class="input" type="text" placeholder="输入即自动上屏，退格 / 回车同步手机" />
                 <div class="text-send-btns">
@@ -238,7 +239,7 @@
                   <button class="btn ghost" id="btn-paste-dev" type="button">粘贴</button>
                 </div>
               </div>
-              <p class="section-kicker">CLIPBOARD SYNC</p>
+              <p class="section-kicker">剪贴板同步</p>
               <div class="text-send-btns vertical">
                 <button class="btn ghost" id="btn-pc2dev" type="button" title="读取电脑剪贴板并粘贴到手机">电脑 → 手机</button>
                 <button class="btn ghost" id="btn-dev2pc" type="button" title="读取手机剪贴板并复制到电脑">手机 → 电脑</button>
@@ -252,23 +253,43 @@
               <div><span class="drawer-index">03</span><h2>状态 · 日志</h2></div>
             </header>
             <div class="drawer-body body-tight">
-              <p class="section-kicker">TELEMETRY</p>
+              <p class="section-kicker">实时指标</p>
               <div class="stat-grid">
                 <div class="stat"><span>丢帧</span><b id="stat-vdrop">0</b></div>
                 <div class="stat"><span>帧数</span><b id="stat-frames">0</b></div>
                 <div class="stat"><span>视频</span><b id="stat-codec">H.264</b></div>
                 <div class="stat"><span>音频</span><b id="stat-audio">—</b></div>
               </div>
-              <div class="log-head"><p class="section-kicker">REAL-TIME LOG</p><button class="btn ghost xs" id="btn-clear-log" type="button">清空</button></div>
+              <div class="log-head"><p class="section-kicker">实时日志</p><button class="btn ghost xs" id="btn-clear-log" type="button">清空</button></div>
               <div class="log-box" id="log-box"></div>
             </div>
           </section>
+
+          <!-- ===== 侧栏底部读数条（跟着侧栏走，画面内不再显示任何数字） ===== -->
+          <aside class="hud-dock" id="hud-dock" aria-hidden="true">
+            <div class="hud hud-tl">
+              <span class="hud-live"><i></i><b>画面</b> 设备状态</span>
+              <span class="hud-sub">H.264 解码</span>
+            </div>
+            <div class="hud hud-tr">
+              <span class="hud-metric"><i>分辨率</i><b id="stat-res">—</b></span>
+              <span class="hud-metric"><i>帧率</i><b id="stat-fps">—</b></span>
+            </div>
+            <div class="hud hud-bl">
+              <span id="stat-serial">设备:未连接</span>
+              <span id="audio-hint">声音:—</span>
+            </div>
+            <div class="hud hud-br">
+              <span class="hud-metric"><i>视图</i><b id="zoom-readout">适配</b></span>
+              <span class="hud-sub">自动适配</span>
+            </div>
+          </aside>
         </div>
 
         <!-- ===== 全屏拖动控制面板 ===== -->
         <div class="fs-dock" id="fs-dock">
           <div class="fs-float" id="fs-float" hidden>
-            <div class="fs-title drag-handle"><span class="fs-title-text">控制 / CONTROL</span><button type="button" class="fs-toggle" id="fs-toggle" title="显示/隐藏控制栏">×</button></div>
+            <div class="fs-title drag-handle"><span class="fs-title-text">控制</span><button type="button" class="fs-toggle" id="fs-toggle" title="显示/隐藏控制栏">×</button></div>
             <div class="fs-group">
               <button data-act="back" type="button"><span class="lbl3">返回</span></button><button data-act="home" type="button"><span class="lbl3">主页</span></button><button data-act="recents" type="button"><span class="lbl3">多任务</span></button>
               <button data-act="power" type="button"><span class="lbl3">电源</span></button><button data-act="vol-up" type="button"><span class="lbl3">音量加</span></button><button data-act="vol-down" type="button"><span class="lbl3">音量减</span></button>
@@ -281,32 +302,12 @@
             <div class="fs-text"><label>文本上屏</label><textarea id="fs-input" rows="2" placeholder="输入汉字/英文,选完自动上屏"></textarea></div>
             <button data-act="stop" class="stop" type="button"><span class="lbl3">停止投屏</span></button>
           </div>
-
-          <!-- ===== 侧栏底部读数条（画面内不再显示任何数字） ===== -->
-          <aside class="hud-dock" id="hud-dock" aria-hidden="true">
-            <div class="hud hud-tl">
-              <span class="hud-live"><i></i><b>CH 01</b> DEVICE FEED</span>
-              <span class="hud-sub">H.264 / WEBCODECS</span>
-            </div>
-            <div class="hud hud-tr">
-              <span class="hud-metric"><i>RES</i><b id="stat-res">—</b></span>
-              <span class="hud-metric"><i>FPS</i><b id="stat-fps">—</b></span>
-            </div>
-            <div class="hud hud-bl">
-              <span id="stat-serial">设备:—</span>
-              <span id="audio-hint">声音:—</span>
-            </div>
-            <div class="hud hud-br">
-              <span class="hud-metric"><i>VIEW</i><b id="zoom-readout">FIT</b></span>
-              <span class="hud-sub">AUTO / CONTAIN</span>
-            </div>
-          </aside>
         </div>
 
         <button class="focus-exit" id="btn-focus-exit" type="button" aria-label="退出沉浸模式">
           <svg viewBox="0 0 24 24"><path d="M9 4H5v4M15 4h4v4M9 20H5v-4M15 20h4v-4"/></svg><span>退出沉浸</span><kbd>I</kbd>
         </button>
-        <div class="focus-toast" id="focus-hint" aria-hidden="true">沉浸模式已开启 · 按 I 或 Esc 恢复工具栏</div>
+        <div class="focus-toast" id="focus-hint" aria-hidden="true">沉浸已开启 · 按 I 或 Esc 恢复工具栏</div>
       </div>
     </div>
 
@@ -316,8 +317,8 @@
         <div class="guide-head"><div><span class="drawer-index">?</span><h2>使用指南</h2></div><button type="button" class="btn ghost xs" id="btn-guide-close">关闭</button></div>
         <div class="guide-body">
           <section><h3>快速开始</h3><ol><li>手机开启「开发者选项 → USB 调试」</li><li>USB 连接电脑，点「开始 USB 投屏」，手机上点「允许」</li><li>或切到「无线投屏」，同一 Wi-Fi 后「自动搜索」并连接</li></ol></section>
-          <section><h3>让画面尽可能大</h3><ul><li>控制集中在侧边工具轨，手机画面始终按整块视口适配</li><li>侧栏固定展开，点「连接 / 控制 / 日志 / 皮肤」切换内容，无需折叠</li><li>点「皮肤」可切换配色，并将工具轨与抽屉移到左侧或右侧</li><li>点「沉浸模式」或按 <kbd>I</kbd>：隐藏全部工具栏；按 I / V / Esc 恢复</li><li>点「全屏」或按 <kbd>H</kbd>：隐藏侧边栏，右侧保留可拖动控制条</li></ul></section>
-          <section><h3>连接与投屏设置</h3><ul><li>USB / 无线二选一，不要同时开；提示占用时关掉 adb、手机助手、其它投屏页</li><li>分辨率、FPS、码率、视频源、声音输出等选项会自动保存</li><li>本版本不修改手机锁屏时间；无线时手机自动锁屏画面会变黑，请在手机上按需调整休眠</li></ul></section>
+          <section><h3>让画面尽可能大</h3><ul><li>控制集中在侧边工具轨，手机画面始终按整块视口适配</li><li>侧栏固定展开，点「连接 / 控制 / 日志 / 皮肤」切换内容，无需折叠</li><li>点「皮肤」可切换配色，并将工具轨与抽屉移到左侧或右侧</li><li>点「沉浸」或按 <kbd>I</kbd>：隐藏全部工具栏；按 I / V / Esc 恢复</li><li>点「全屏」或按 <kbd>H</kbd>：隐藏侧边栏，右侧保留可拖动控制条</li></ul></section>
+          <section><h3>连接与投屏设置</h3><ul><li>USB / 无线二选一，不要同时开；提示占用时关掉 adb、手机助手、其它投屏页</li><li>分辨率、帧率、码率、视频源、声音输出等选项会自动保存</li><li>本版本不修改手机锁屏时间；无线时手机自动锁屏画面会变黑，请在手机上按需调整休眠</li></ul></section>
           <section><h3>声音说明</h3><ul><li>「手机 + 电脑」需 Android 13 及以上；较低版本会自动改成不转发音频</li><li>「仅手机」不转发音频，手机始终有声；「仅电脑」会在投屏期间让手机静音</li><li>断开投屏会释放手机端音频；若手机仍无声，按一次手机音量键，或重新连接一次投屏</li></ul></section>
           <section><h3>操作说明</h3><ul><li>画布可触控、滑动、滚轮；控制抽屉提供常用导航键</li><li>文本框打字自动上屏；中文选完再发；退格 / 回车同步手机</li><li>剪贴板可双向同步；手机截屏和电脑截屏保存到电脑「图片」</li><li>快捷键：<kbd>H</kbd> 全屏 · <kbd>M</kbd> 静音 · <kbd>I</kbd> 沉浸 · <kbd>Shift+Esc</kbd> 停止投屏</li></ul></section>
           <section><h3>停止服务</h3><ul><li>会结束本地服务、清理进程，并关闭本网页</li><li>下次用 start.vbs 重新启动</li></ul></section>
@@ -341,6 +342,12 @@
         let focusTimer = 0;
 
         const refreshCanvas = () => requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+        const hudDock = document.getElementById("hud-dock");
+        const dockToDrawer = (drawer) => {
+          if (!hudDock || !drawer) return;
+          const host = drawer.parentElement;
+          if (host && hudDock.parentElement !== host) host.appendChild(hudDock);
+        };
         const syncDrawerButtons = () => {
           drawerButtons.forEach((button) => {
             const panel = document.querySelector(`[data-panel="${button.dataset.drawer}"]`);
@@ -355,10 +362,12 @@
           if (!target) return;
           drawers.forEach((drawer) => drawer.classList.remove("is-open"));
           target.classList.add("is-open");
+          dockToDrawer(target);
           syncDrawerButtons();
           refreshCanvas();
         };
         drawerButtons.forEach((button) => button.addEventListener("click", () => toggleDrawer(button.dataset.drawer)));
+        drawers.filter((drawer) => drawer.classList.contains("is-open")).forEach(dockToDrawer);
 
         const setFocus = (on) => {
           const focused = typeof on === "boolean" ? on : !app.classList.contains("focus-mode");
@@ -453,7 +462,6 @@
           const text = status.textContent.trim();
           statusShort.textContent = text;
           railState.dataset.state = status.classList.contains("dropped") ? "dropped" : status.classList.contains("offline") ? "offline" : "online";
-          document.getElementById("btn-show-guide")?.classList.toggle("is-guide-alert", railState.dataset.state !== "online");
         };
         new MutationObserver(syncStatus).observe(status, { attributes: true, childList: true, characterData: true, subtree: true, attributeFilter: ["class"] });
         syncStatus();
