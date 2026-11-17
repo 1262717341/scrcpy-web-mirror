@@ -6,7 +6,7 @@
   <img src="assets/logo.png" alt="scrcpy 便捷网页版" width="120" />
 </p>
 
-- 当前版本：**v4.0.11**
+- 当前版本：**v4.0.12**
 - 内核：scrcpy-server 5.0.1 · `@yume-chan/adb` / `@yume-chan/scrcpy`
 - 平台：Windows 10 / 11，浏览器 Chrome / Edge 110+
 
@@ -25,9 +25,17 @@
 | 界面 | 侧边工具轨 + 抽屉式面板，支持全屏（H）、沉浸模式（I）、静音（M）、停止投屏（Shift+Esc） |
 | 皮肤 | 内置 warm / mint / cobalt / graphite 四套配色，自定义主色与背景色，工具轨可左右切换 |
 
+## 更新日志
+
+### v4.0.12
+
+- **读数条移入侧栏底部**：CH/ADB、RES/FPS、设备/声音、VIEW 四项读数不再叠加在手机画面上，统一收进左侧栏底部的半透明读数条；窄屏（≤760 px）自动改为底部工具轨上方的整宽横排，1366/1024/700 三档窗口实测与画面零重叠。
+- **无线连接提速**：启动前的设备清理与看门狗布防各自合并为一次 shell 往返、并与 scrcpy 启动并行；`/api/wireless-push` 在手机端 jar 尺寸一致时跳过 700 KB 重传。实测热态二次连接 1.5 s、冷态首次 6.5 s。
+- **ADB 握手超时**：默认 15 s → 30 s，给首次「允许 USB 调试」留出点击时间；排查时可用 `?auth_timeout=毫秒` 覆盖。连接失败时顶栏直接显示「连接失败」，不再停在「ADB 握手中…」。
+- **手机端看门狗收敛**：无线会话失联即结束手机端 scrcpy、释放音频采集并退出；判据只剩「心跳过期 30 s」「Wi‑Fi IPv4 连续两次消失」「从未收到心跳满 60 s」三条，心跳/运行标记带会话号隔离，不会误杀新会话。实现细节见 `docs/watchdog.md`。
 ## 下载安装
 
-不想配环境？直接下安装包：**[scrcpy-web-mirror-v4.0.11-Setup-x64.exe](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**（约 15 MB，内置 Python 运行时与官方 adb）。安装后双击桌面快捷方式启动，手机开「USB 调试」并连上电脑，点「开始 USB 投屏」即可。
+不想配环境？直接下安装包：**[scrcpy-web-mirror-v4.0.12-Setup-x64.exe](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**（约 15 MB，内置 Python 运行时与官方 adb）。安装后双击桌面快捷方式启动，手机开「USB 调试」并连上电脑，点「开始 USB 投屏」即可。
 
 ## 从源码运行（开发者）
 

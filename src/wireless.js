@@ -503,13 +503,34 @@ export async function connectWireless(target, onStatus = () => {}) {
   const connection = createAdbConnection(ws);
   onStatus("ADB 握手中…");
   let transport;
+  const authTask = AdbDaemonTransport.authenticate({
+    serial: t,
+    connection,
+    credentialStore: new AdbWebCredentialStore("PandaTestLocal"),
+    readTimeLimit: 0,
+  });
+  authTask.catch(() => {});
+  // 首次连接手机时会弹「允许 USB 调试」，留足阅读/点击时间；排查时可用 ?auth_timeout=毫秒 调整
+  const authTimeout = Math.max(
+    8000,
+    Number(new URLSearchParams(location.search).get("auth_timeout")) || 30000
+  );
   try {
-    transport = await AdbDaemonTransport.authenticate({
-      serial: t,
-      connection,
-      credentialStore: new AdbWebCredentialStore("PandaTestLocal"),
-      readTimeLimit: 0,
-    });
+    // 握手必须有上限：手机在等「允许调试」确认、或 adbd 被旧连接占住时，
+    // authenticate 会一直挂着不返回，界面就永远停在「ADB 握手中…」。
+    transport = await Promise.race([
+      authTask,
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new WirelessError(
+              "ADB 握手超时（" + Math.round(authTimeout / 1000) + "s）。若手机弹出「允许 USB 调试」请点允许；否则重新开启无线调试后再连",
+              "AUTH_TIMEOUT"
+            )
+          );
+        }, authTimeout);
+      }),
+    ]);
   } catch (err) {
     try {
       ws.close();

@@ -17,6 +17,8 @@
   --info: #83aec9;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 画面上下留出的净空：四角读数只住在这里，永远不压在画面上 */
+  --hud-gap: 38px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -48,12 +50,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: roun
   mask-image: radial-gradient(circle at center, black, transparent 82%);
 }
 .ambient-glow { position: absolute; inset: 0; background: radial-gradient(circle at 50% 45%, rgba(216,179,122,.055), transparent 48%); }
-.stage { position: absolute; inset: 0 12px 0 88px; z-index: 1; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; }
+.stage { position: absolute; inset: 0 12px 0 88px; z-index: 1; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; padding: var(--hud-gap) 0; }
 /* 画面只占工具轨/抽屉右侧的可用区，避免侧栏压住投屏内容 */
 .app.drawer-open .stage { left: 388px; right: 12px; }
 .app.sidebar-right .stage { left: 12px; right: 88px; }
 .app.sidebar-right.drawer-open .stage { left: 12px; right: 388px; }
-.app.focus-mode .stage,
+.app.focus-mode .stage { inset: 0; padding: 0; }
 .mirror-layout:fullscreen .stage,
 .mirror-layout.is-fullscreen .stage { inset: 0; }
 .stage canvas { position: relative; z-index: 2; display: block; border-radius: 5px; box-shadow: 0 18px 65px rgba(0,0,0,.55); }
@@ -72,20 +74,50 @@ body.mirroring .ambient-glow { opacity: .55; }
 .ph-hint { margin: 13px 0 0; color: var(--ink-3); font-size: 11px; }
 @keyframes breathe { 50% { background: rgba(216,179,122,.09); border-color: rgba(216,179,122,.26); } }
 
-/* HUD */
-.hud { position: absolute; z-index: 6; display: flex; gap: 4px; pointer-events: none; color: rgba(236,233,227,.52); font: 10px/1.5 var(--mono); letter-spacing: .04em; }
-.hud-tl { top: 18px; left: 92px; flex-direction: column; }
-.hud-tr { top: 18px; right: 20px; align-items: flex-end; flex-direction: column; }
-.hud-bl { bottom: 18px; left: 92px; flex-direction: column; }
-.hud-br { right: 20px; bottom: 18px; align-items: flex-end; flex-direction: column; }
+/* HUD：四角读数固定在画面之外（画面上下留白的净空里），不再压住画面内容 */
+.hud { position: absolute; z-index: 6; display: flex; gap: 2px; max-width: 46%; overflow: hidden; pointer-events: none; color: rgba(236,233,227,.52); font: 10px/1.35 var(--mono); letter-spacing: .04em; white-space: nowrap; opacity: 0; transition: opacity .18s; }
+body.mirroring .hud { opacity: 1; }
+.hud-tl, .hud-bl { left: 92px; flex-direction: column; align-items: flex-start; }
+.hud-tr, .hud-br { right: 16px; flex-direction: column; align-items: flex-end; }
+.hud-tl, .hud-tr, .hud-bl, .hud-br { top: 10px; }
 .hud-live { display: flex; align-items: center; gap: 7px; }
 .hud-live i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
 .hud-live b { color: var(--accent); font-weight: 500; }
 body.mirroring .hud-live i { background: var(--accent); box-shadow: 0 0 10px rgba(216,179,122,.5); }
-.hud-sub { color: rgba(236,233,227,.32); font-size: 9px; }
+.hud-sub { overflow: hidden; color: rgba(236,233,227,.32); font-size: 9px; text-overflow: ellipsis; }
 .hud-metric { display: flex; align-items: baseline; gap: 8px; }
 .hud-metric i { color: var(--ink-3); font-style: normal; }
 .hud-metric b { max-width: 210px; overflow: hidden; color: rgba(236,233,227,.75); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.hud-bl span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; }
+
+/* HUD DOCK：读数收进侧栏最底下的一条浮条，画面里彻底不放数字 */
+.hud-dock {
+  position: absolute; z-index: 36; left: 88px; width: 300px; bottom: 12px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 13px;
+  background: linear-gradient(180deg, rgba(16,19,24,.62), rgba(9,11,14,.94));
+  backdrop-filter: blur(16px);
+  pointer-events: none; opacity: 0; transition: opacity .18s;
+}
+body.mirroring .hud-dock { opacity: 1; }
+.app.focus-mode .hud-dock { display: none; }
+.hud-dock .hud {
+  position: static; left: auto; right: auto; top: auto; bottom: auto;
+  width: 100%; max-width: none; opacity: 1; gap: 8px;
+  flex-direction: row; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; font-size: 9.5px; line-height: 1.4;
+  overflow: visible; white-space: normal;
+}
+.hud-dock .hud-bl span, .hud-dock .hud-metric b { white-space: nowrap; overflow: visible; text-overflow: clip; max-width: none; }
+.hud-dock .hud-tl, .hud-dock .hud-bl { align-items: flex-start; }
+.hud-dock .hud-tr, .hud-dock .hud-br { align-items: flex-end; justify-content: flex-end; }
+.hud-dock .hud-tl, .hud-dock .hud-bl { flex-wrap: nowrap; }
+.hud-dock .hud-sub { flex: none; }
+.hud-dock .hud-live b { color: var(--accent); }
+/* 抽屉内容给底部浮条让位，末项不会被盖住 */
+.side-left .drawer-body { padding-bottom: 84px; }
+
 
 /* 左侧工具轨 */
 .rail { position: absolute; z-index: 40; top: 12px; bottom: 12px; left: 12px; width: 64px; display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; border: 1px solid var(--line); border-radius: 13px; background: rgba(13,16,20,.88); box-shadow: 0 16px 44px rgba(0,0,0,.25); backdrop-filter: blur(18px); }
@@ -299,16 +331,10 @@ body.mirroring .hud-live i { box-shadow: 0 0 10px color-mix(in srgb, var(--accen
   .app.sidebar-right .rail { right: 12px; left: auto; }
   .app.sidebar-right .side-left { right: 88px; left: auto; }
   .app.sidebar-right .side-right { right: auto; left: 12px; }
-  .app.sidebar-right .hud-tl, .app.sidebar-right .hud-bl { left: 20px; }
-  .app.sidebar-right .hud-tr, .app.sidebar-right .hud-br { right: 92px; }
 }
 .mirror-layout:fullscreen .rail, .mirror-layout.is-fullscreen .rail,
 .mirror-layout:fullscreen .side-left, .mirror-layout.is-fullscreen .side-left,
 .mirror-layout:fullscreen .side-right, .mirror-layout.is-fullscreen .side-right { display: none; }
-.mirror-layout:fullscreen .hud-tl, .mirror-layout.is-fullscreen .hud-tl,
-.mirror-layout:fullscreen .hud-bl, .mirror-layout.is-fullscreen .hud-bl { left: 18px; }
-.mirror-layout:fullscreen .hud-tr, .mirror-layout.is-fullscreen .hud-tr,
-.mirror-layout:fullscreen .hud-br, .mirror-layout.is-fullscreen .hud-br { right: 18px; }
 
 body { font-size: 14px; }
 .hud { font-size: 11px; }
@@ -381,6 +407,7 @@ body { font-size: 14px; }
 @media (max-width: 1100px) and (min-width: 761px) {
   .side-left { width: 286px; }
   .side-right { width: 286px; }
+  .hud-dock { width: 286px; }
 }
 @media (max-width: 760px) {
   .rail { top: auto; right: 8px; bottom: 8px; left: 8px; width: auto; height: 64px; flex-direction: row; align-items: center; gap: 4px; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; border-radius: 12px; }
@@ -390,13 +417,14 @@ body { font-size: 14px; }
   .rail-btn small, .rail-btn .rl { font-size: 10px; }
   .side-left, .side-right { top: 8px; right: 8px; bottom: 81px; left: 8px; width: auto; }
   .drawer { max-width: none; }
-  .hud { font-size: 10px; }
-  .hud-tl { top: 12px; left: 12px; }
-  .hud-tr { top: 12px; right: 12px; }
-  .hud-bl { bottom: 84px; left: 12px; }
-  .hud-br { right: 12px; bottom: 84px; }
+  .hud { font-size: 10px; max-width: 52%; }
+  :root { --hud-gap: 34px; }
   .hud-sub { display: none; }
   .hud-metric b { max-width: 130px; }
+  /* 窄屏：读数条贴底部工具轨上方，整宽横排 */
+  .hud-dock { left: 8px; right: 8px; width: auto; bottom: 81px; padding: 7px 10px; }
+  .hud-dock .hud { font-size: 9px; }
+  .hud-dock .hud-sub { display: inline; }
   .ph-title { font-size: 24px; }
   .ph-sub { margin-bottom: 18px; }
   .placeholder { padding: 20px; }

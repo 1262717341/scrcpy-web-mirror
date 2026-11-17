@@ -100,18 +100,45 @@ function h264HasIdr(data) {
   return false;
 }
 
-/** 手机端看门狗的脚本与日志位置 */
-const AUDIO_GUARD_PATH = "/data/local/tmp/panda_guard.sh";
-const AUDIO_GUARD_LOG = "/data/local/tmp/panda_guard.log";
-const AUDIO_GUARD_HB = "/data/local/tmp/panda_hb";
-const AUDIO_GUARD_RUN = "/data/local/tmp/panda_run";
+/** 手机端看门狗：唯一职责是「无线会话失联后回收 scrcpy」，状态文件都放在 tmp 目录 */
+const GUARD_PATH = "/data/local/tmp/panda_guard.sh";
+const GUARD_LOG = "/data/local/tmp/panda_guard.log";
+const GUARD_HB = "/data/local/tmp/panda_hb";
+const GUARD_RUN = "/data/local/tmp/panda_run";
+
+/**
+ * 看门狗判据只有两条，够用且不会误杀：
+ *  1) 心跳过期：页面每 5 秒通过已建立的 ADB 通道喂一次，30 秒没更新才算死。
+ *     写心跳这个动作本身就是链路探活 —— 写得进去说明通道还活着。
+ *  2) Wi-Fi 的 IPv4 地址连续 2 次消失（关 Wi-Fi / 掉线）：确定事实，直接动手。
+ * 不再 ping 网关、不再数 TCP ESTABLISHED、不再按端口猜状态。
+ */
+const GUARD_STALE = 30;
+/** 从没见过心跳时的自退/回收时间（秒）：布防前一定会先写一次心跳，读不到就是异常，按失联处理 */
+const GUARD_IDLE_EXIT = 60;
+
+/** 净音量不变的音频路由刷新：抬一格再原样写回，不改用户音量、不弹 UI */
+const AUDIO_ROUTE_CMD =
+  "v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); " +
+  'case "$v" in ""|*[!0-9]*) v="";; esac; ' +
+  'if [ -n "$v" ]; then ' +
+  "media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; " +
+  'media volume --stream 3 --set $v >/dev/null 2>&1; fi; true';
+
+/** 每轮无线会话一个短号：看门狗据此判断「自己是否已被新会话替换」，避免旧狗误杀新会话 */
+function newGuardSession() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/** 心跳 / 运行标记按会话隔离：另一个窗口或上一轮会话写自己的文件，影响不到本轮判断 */
+const guardHbPath = (session) => GUARD_HB + "." + session;
+const guardRunPath = (session) => GUARD_RUN + "." + session;
 
 /**
  * pkill 的模式用「方括号」写法：[c]om.foo 能匹配 com.foo，
  * 但不会匹配到「命令行里写着 [c]om.foo」的 pkill 自己及其父 shell，
  * 否则清理命令会把自己先杀掉。
  */
-const KILL_SCRCPY = 'pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; true';
 
 export class MirrorError extends Error {
   constructor(message, code = "MIRROR_ERROR", cause) {
@@ -472,23 +499,25 @@ export class AdbMirror {
   /**
    * 结束手机端 scrcpy，并且**回读确认真的结束了**。
    * 以前只发一次 pkill、不管结果，日志却写着「已结束」，实际进程还在占音频。
+   * 现在整段清理在手机端一次跑完（TERM → 0.4s → KILL → 回读），只占一个 adb 往返。
    */
-  async killScrcpyServerOnDevice(rounds = 3) {
-    if (!this.adb) return false;
-    let pids = await this.listScrcpyPids();
-    if (!pids.length) return true;
-    for (let i = 0; i < rounds; i += 1) {
-      await this.deviceShell(KILL_SCRCPY, 6000);
-      // 补刀：部分 ROM 上 pkill -f 匹配不全，直接按 pid 再杀一次
-      if (pids.length) {
-        await this.deviceShell("kill -9 " + pids.join(" ") + " 2>/dev/null; true", 5000);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      pids = await this.listScrcpyPids();
-      if (!pids.length) return true;
+  async killScrcpyServerOnDevice() {
+    if (!this.adb) return true;
+    const out = String(
+      (await this.deviceShell(
+        'pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.4; ' +
+          'pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; ' +
+          'pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; sleep 0.2; ' +
+          'echo "REMAIN=$(ps -A 2>/dev/null | grep -c \'[c]om.genymobile.scrcpy\')"',
+        12000
+      )) || ""
+    );
+    const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+    if (remain) {
+      this.onLog("手机端 scrcpy 仍在运行（" + remain + " 个进程），音频可能仍被占用");
+      return false;
     }
-    this.onLog("手机端 scrcpy 仍在运行（pid " + pids.join(",") + "），音频可能仍被占用");
-    return false;
+    return true;
   }
 
   /**
@@ -500,14 +529,7 @@ export class AdbMirror {
    */
   async refreshAudioRoute() {
     if (!this.adb) return;
-    await this.deviceShell(
-      "v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); " +
-      'case "$v" in ""|*[!0-9]*) v="";; esac; ' +
-      'if [ -n "$v" ]; then ' +
-      "media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; " +
-      'media volume --stream 3 --set $v >/dev/null 2>&1; fi; true',
-      15000
-    );
+    await this.deviceShell(AUDIO_ROUTE_CMD, 15000);
   }
 
   /**
@@ -522,7 +544,7 @@ export class AdbMirror {
       'echo "[看门狗进程]"; ps -A 2>/dev/null | grep "[p]anda_guard.sh" || echo "无"; ' +
       'echo "[媒体音量/静音/路由]"; dumpsys audio 2>/dev/null | grep -iE "streamVolume|STREAM_MUSIC|muted|device=" | head -20; ' +
       'echo "[勿扰 zen_mode]"; settings get global zen_mode 2>/dev/null; ' +
-      'echo "[看门狗日志]"; tail -n 8 ' + AUDIO_GUARD_LOG + ' 2>/dev/null || echo "无"';
+      'echo "[看门狗日志]"; tail -n 8 ' + GUARD_LOG + ' 2>/dev/null || echo "无"';
     return String((await this.deviceShell(cmd, 15000)) || "").trim();
   }
 
@@ -569,224 +591,146 @@ export class AdbMirror {
     // 若走到这里手机仍然无声，唯一可靠的恢复手段是重启手机。
   }
 
-  /** 无线连接的端口（十六进制，/proc/net/tcp 里的写法） */
-  _guardPortHex() {
-    const m = String(this._wirelessTarget || "").match(/:(\d{2,5})$/);
-    if (!m) return "";
-    const port = parseInt(m[1], 10);
-    if (!Number.isFinite(port) || port <= 0 || port > 65535) return "";
-    return port.toString(16).toUpperCase().padStart(4, "0");
+  /**
+   * 会话开始前的一次性清理：把上一轮的看门狗、scrcpy 残留一起清掉，顺手读回 SDK 等级。
+   * 以前这是 3~4 个 adb 往返 + 两次 sleep；现在整段在手机端跑完，只占一个往返。
+   */
+  async prepareDevice() {
+    if (!this.adb) return { sdk: 0, remain: 0 };
+    const out = String(
+      (await this.deviceShell(
+        'pkill -TERM -f "[p]anda_guard.sh" 2>/dev/null; ' +
+          'pkill -9 -f "[p]anda_guard.sh" 2>/dev/null; ' +
+          'pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.35; ' +
+          'pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; ' +
+          'pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; ' +
+          'echo "SDK=$(getprop ro.build.version.sdk)"; ' +
+          'echo "REMAIN=$(ps -A 2>/dev/null | grep -c \'[c]om.genymobile.scrcpy\')"',
+        10000
+      )) || ""
+    );
+    const sdk = Number((/SDK=(\d+)/.exec(out) || [])[1] || 0);
+    const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+    if (sdk > 0) this._sdk = sdk;
+    if (remain) this.onLog("手机端仍有 " + remain + " 个 scrcpy 进程未退出，继续启动可能抢占音频");
+    return { sdk, remain };
   }
 
   /**
-   * 手机端看门狗：无线投屏期间由手机自己盯着与电脑的链路，
-   * 一旦断开就把 scrcpy 结束掉，把音频还给扬声器。
+   * 手机端看门狗（v4.0.12 起重新收敛为单一职责）：
    *
+   *   无线会话失联  →  结束手机端 scrcpy、释放音频采集  →  自己退出
+   *
+   * 它不重连、不改用户的勿扰/音量设置、不猜网络状态。
    * 为什么必须由手机自己动手：手机主动关 Wi-Fi 时电脑根本连不上手机，
-   * 任何远程清理都会失败。而断网后手机的 adbd / scrcpy socket 仍会保持
-   * ESTABLISHED（内核要重传十几分钟才放弃），scrcpy 写视频流时被内核阻塞，
-   * 进程**不会自己退出**，音频采集一直被占着 —— 这就是断网后手机长期没声音的根因。
+   * 任何远程清理都会失败；而断网后 scrcpy 的 socket 会被内核挂住十几分钟，
+   * 进程不会自己退出、音频采集一直被占着 —— 这就是断网后手机长期没声音的根因。
    *
-   * 判据（任一命中即动手）：
-   *  a) 手机 ping 自己的 Wi-Fi 网关连续 3 次失败（每 2 秒一次 ≈ 6 秒内命中）。
-   *     主判据。Wi-Fi 一关，默认路由立刻消失，ping 立即失败，完全不用电脑配合，
-   *     也比「电脑写心跳文件」快十几倍。
-   *  b) 与电脑的连接（本地端口 5555）从 ESTABLISHED 变成消失，连续 2 次。
-   *  c) 电脑心跳文件超过 90 秒没更新。兜底判据；阈值放宽是因为后台标签页的
-   *     定时器会被浏览器节流到 1 分钟一次，阈值太小会把正常投屏误杀。
+   * 判据只有两条（见文件顶部 GUARD_STALE 注释）：心跳过期、Wi-Fi 地址消失。
+   * 布防只占一个 adb 往返（写脚本 → 语法校验 → 置一次心跳 → 起进程 → 回读运行标记），
+   * 并且与 scrcpy 启动并行执行，不再拖慢连接。
    */
   async deployAudioGuard() {
-    const portHex = this._guardPortHex();
-    if (!portHex || !this.adb) return false;
-    await this.stopAudioGuard();
-
-    const gw = await this.getWifiGateway();
-    // 探测结果打出来：下次日志能直接看到 ip route / 接口地址的真实回显，
-    // 网关取不到时不再靠猜
-    const probe = String(
-      (await this.deviceShell(
-        "ip route 2>/dev/null | head -n 2; " +
-        "ip -4 addr show wlan0 2>/dev/null | grep 'inet ' | head -n 1",
-        8000
-      )) || ""
-    ).replace(/\s*\n\s*/g, " | ").trim();
-    if (probe) this.onLog("手机网络探测：" + probe);
-    const body = this._guardScript(portHex, gw);
-
-    // 用 base64 落盘，不用 heredoc：heredoc 在 shell,v2 / pty 各家 ROM 上的
-    // 换行处理不一致，一旦没写成功，后面启动的是个不存在的文件，
-    // 页面只会看到「看门狗未能启动」却没有任何线索。
+    if (!this.adb) return false;
+    const session = this._guardSession || (this._guardSession = newGuardSession());
+    const body = this._guardScript(session);
     const bytes = new TextEncoder().encode(body);
     let bin = "";
     for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
     const b64 = btoa(bin);
-    const write =
-      "rm -f " + AUDIO_GUARD_LOG + " " + AUDIO_GUARD_HB + " " + AUDIO_GUARD_RUN + "; " +
-      "echo '" + b64 + "' | base64 -d > " + AUDIO_GUARD_PATH + "; " +
-      "chmod 755 " + AUDIO_GUARD_PATH + " 2>/dev/null; " +
-      "ls -l " + AUDIO_GUARD_PATH + " 2>&1; " +
-      "sh -n " + AUDIO_GUARD_PATH + " 2>&1 && echo SYNTAX_OK";
-    const writeOut = String((await this.deviceShell(write, 12000)) || "").trim();
-    if (!/SYNTAX_OK/.test(writeOut)) {
-      this.onLog("看门狗脚本写入/校验失败：" + (writeOut || "无输出（base64 可能不可用）"));
+    const cmd =
+      "echo '" + b64 + "' | base64 -d > " + GUARD_PATH + "; " +
+      "chmod 755 " + GUARD_PATH + " 2>/dev/null; " +
+      "sh -n " + GUARD_PATH + " 2>/dev/null || { echo GUARD_SYNTAX_FAIL; exit 0; }; " +
+      "echo \"$(date +%s) " + session + "\" > " + guardHbPath(session) + "; " +
+      "( nohup sh " + GUARD_PATH + " " + session + " </dev/null >/dev/null 2>&1 & ); " +
+      // 轮询判活：设备忙时 sh 起来可能要 1 秒多，固定 sleep 会误报「未启动」
+      "ok=0; i=0; while [ $i -lt 8 ]; do " +
+      "now=$(date +%s); r=$(cat " + guardRunPath(session) + " 2>/dev/null); r=${r%% *}; " +
+      'case "$r" in ""|*[!0-9]*) ;; *) if [ $((now-r)) -lt 25 ]; then ok=1; break; fi ;; esac; ' +
+      "i=$((i+1)); sleep 0.3; done; " +
+      'if [ $ok -eq 1 ]; then echo GUARD_ALIVE; else echo GUARD_DEAD; fi; ' +
+      "tail -n 2 " + GUARD_LOG + " 2>/dev/null";
+
+    const out = String((await this.deviceShell(cmd, 12000)) || "").trim();
+    if (/GUARD_SYNTAX_FAIL/.test(out)) {
+      this.onLog("看门狗脚本语法校验失败，已跳过布防（不影响本轮投屏）");
       return false;
     }
-
-    // 先喂一次心跳，避免看门狗刚起来时误判
-    await this.heartbeat();
-
-    // 后台启动并立即回显：nohup 忽略 SIGHUP，stdio 全重定向到 /dev/null，
-    // 避免 adb 断连时写 EPIPE 把脚本带走。子 shell 包裹 + echo 让命令立刻返回。
-    this.onLog("启用手机端看门狗：断网后由手机自己结束 scrcpy、恢复声音");
-    const start =
-      "( nohup sh " + AUDIO_GUARD_PATH + " </dev/null >/dev/null 2>&1 & ); " +
-      "sleep 1.2; echo LAUNCHED; " +
-      "cat " + AUDIO_GUARD_LOG + " 2>/dev/null";
-    const startOut = String((await this.deviceShell(start, 10000)) || "").trim();
-
-    let alive = await this.isAudioGuardAlive();
-    if (!alive) {
-      // nohup 没起来：先杀掉可能半死的实例（避免双份），再试 setsid（脱离会话，部分 ROM 更稳）
-      await this.stopAudioGuard();
-      await this.deviceShell(
-        "( setsid sh " + AUDIO_GUARD_PATH + " </dev/null >/dev/null 2>&1 & ); sleep 1.2; true",
-        8000
-      );
-      alive = await this.isAudioGuardAlive();
-    }
-    const tail = (await this.readAudioGuardLog(4)).replace(/\s*\n\s*/g, " | ");
+    const alive = /GUARD_ALIVE/.test(out);
+    const tail = out
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("["))
+      .join(" | ");
     if (alive) {
       this.onLog(
-        "看门狗已就绪" +
-          (gw ? "（守 Wi-Fi 网关 " + gw + "，断网约 6 秒内出手）" : "（守 Wi-Fi 默认路由，断网约 6 秒内出手）") +
+        "看门狗已布防：心跳 5s/次，失联超过 " + GUARD_STALE + "s 自动回收 scrcpy" +
           (tail ? "；手机日志 " + tail : "")
       );
     } else {
-      // 把启动时的原始回显带出来：是进程没起来、还是 ps 检测不到，一眼能分清
-      this.onLog(
-        "看门狗未能启动。诊断回显：" + (startOut.replace(/\s*\n\s*/g, " | ") || "无输出") +
-          (tail ? "；手机日志 " + tail : "")
-      );
+      this.onLog("看门狗未能启动。诊断回显：" + (out.replace(/\s*\n\s*/g, " | ") || "无输出"));
     }
     return alive;
   }
 
-  /** 手机 Wi-Fi 的默认网关，看门狗用它判断 Wi-Fi 是否还连着 */
-  async getWifiGateway() {
-    if (!this.adb) return "";
-    // 首选 ip route 的默认路由行（实测 Android 17 小米：/proc/net/route 主表里
-    // 没有 wlan 默认路由，默认路由在每网络独立表里，ip route 才能看到）。
-    const route = String((await this.deviceShell("ip route 2>/dev/null", 5000)) || "");
-    for (const line of route.split(/\n/)) {
-      const m = /^default\s+via\s+(\d{1,3}(?:\.\d{1,3}){3})\s+dev\s+wlan/.exec(line.trim());
-      if (m) return m[1];
-    }
-    // 兜底：内核路由表 /proc/net/route：wlan* 接口上有默认路由（Destination=00000000），
-    // Gateway 字段是小端十六进制（192.168.31.1 -> 011FA8C0）。
-    const raw = String((await this.deviceShell("cat /proc/net/route 2>/dev/null", 5000)) || "");
-    for (const line of raw.split(/\n/).slice(1)) {
-      const f = line.trim().split(/\s+/);
-      if (f.length > 2 && f[1] === "00000000" && /^wlan/.test(f[0])) {
-        const hex = String(f[2] || "").toUpperCase();
-        if (/^[0-9A-F]{8}$/.test(hex)) {
-          const bytes = hex.match(/../g).reverse().map((h) => parseInt(h, 16));
-          if (bytes.every((b) => b >= 0 && b <= 255)) return bytes.join(".");
-        }
-        break;
-      }
-    }
-    return "";
-  }
-
   /** 看门狗脚本正文（单独抽出来，方便本地仿真验证） */
-  _guardScript(portHex, gw) {
+  _guardScript(session) {
     const lines = [
       "#!/system/bin/sh",
-      "PORT_HEX=" + portHex,
-      "GW='" + (gw || "") + "'",
-      "LOG=" + AUDIO_GUARD_LOG,
-      "HB=" + AUDIO_GUARD_HB,
+      "# 单一职责：无线会话失联 -> 结束 scrcpy、释放音频采集 -> 退出。",
+      "# 不重连、不改勿扰/音量、不猜网络；判据只有「心跳过期」与「Wi-Fi 地址消失」。",
+      'SESSION="' + session + '"',
+      "HB=" + guardHbPath(session),
+      "RUN=" + guardRunPath(session),
+      "LOG=" + GUARD_LOG,
+      "STALE=" + String(GUARD_STALE),
+      "IDLE=" + String(GUARD_IDLE_EXIT),
       'log() { echo "[$(date +%H:%M:%S)] $*" >> "$LOG"; }',
-      'log "guard start port=$PORT_HEX gw=${GW:-none}"',
-      "RUN=" + AUDIO_GUARD_RUN,
-      // 无线接口名：默认 wlan0，用 ip link 探测实际名字（部分双频设备是别的）
+      'log "guard start session=$SESSION stale=${STALE}s"',
       "IFACE=$(ip link 2>/dev/null | sed -n 's/^[0-9]*: \\(wlan[^:]*\\):.*/\\1/p' | head -n 1)",
       'if [ -z "$IFACE" ]; then IFACE=wlan0; fi',
-      'log "iface=$IFACE"',
-      // GW 兜底解析（一）：ip route 的默认路由行，不用 awk（部分 toybox 没有）
-      "if [ -z \"$GW\" ]; then GW=$(ip route 2>/dev/null | sed -n 's/^default via \\([0-9]*\\.[0-9]*\\.[0-9]*\\.[0-9]*\\) dev wlan.*/\\1/p' | head -n 1); fi",
-      // GW 兜底解析（二）：读 /proc/net/route，wlan* 上有默认路由 -> Gateway 字段是小端十六进制
-      'if [ -z "$GW" ]; then',
-      '  gwhex=""; while read -r rif rdest rgw _; do',
-      '    [ "$rdest" = "00000000" ] || continue',
-      '    case "$rif" in wlan*) gwhex="$rgw"; break ;; esac',
-      "  done < /proc/net/route",
-      '  if [ "${#gwhex}" -eq 8 ]; then GW="$((0x${gwhex:6:2})).$((0x${gwhex:4:2})).$((0x${gwhex:2:2})).$((0x${gwhex:0:2}))"; fi',
-      "fi",
-      'if [ -n "$GW" ]; then log "gateway=$GW"; fi',
-      "n=0; seen=0; hbSeen=0; t=0; netfail=0; neton=0; rseen=0; pfc=0",
-      "while true; do",
+      "had_ip=0; lost=0; tick=0; hb_seen=0",
+      "while :; do",
       "  now=$(date +%s)",
-      '  echo "$now" > "$RUN"',
-      "  hb=$(cat $HB 2>/dev/null)",
-      '  case "$hb" in ""|*[!0-9]*) hb="";; esac',
-      '  if [ -n "$hb" ]; then hbSeen=1; fi',
-      '  c=$(cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -c -E ":$PORT_HEX [0-9A-F]+:[0-9A-F]+ 01 ")',
-      '  if [ "${c:-0}" -gt 0 ]; then',
-      '    if [ "$seen" -eq 0 ]; then log "link up"; fi',
-      "    seen=1; n=0",
+      "  tick=$((tick+1))",
+      // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 5 轮（约 10 秒）一次
+      '  if [ "$tick" -le 1 ] || [ $((tick % 5)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
+      '  hb=$(cat "$HB" 2>/dev/null)',
+      "  hb_ts=${hb%% *}",
+      "  hb_sess=${hb#* }",
+      // 新会话接手：立刻退场，绝不动新会话的 scrcpy
+      '  if [ -n "$hb_sess" ] && [ "$hb_sess" != "$hb" ] && [ "$hb_sess" != "$SESSION" ]; then',
+      '    log "superseded by $hb_sess, exit"; exit 0',
+      "  fi",
+      '  case "$hb_ts" in ""|*[!0-9]*) hb_ts="";; esac',
+      '  if [ -n "$hb_ts" ]; then hb_seen=1; fi',
+      // Wi-Fi 地址消失是确定事实：连续 2 次（约 4 秒）即判定，不必等心跳过期
+      '  if ip -4 addr show "$IFACE" 2>/dev/null | grep -q "inet "; then',
+      "    had_ip=1; lost=0",
       "  else",
-      '    if [ "$seen" -eq 1 ]; then n=$((n+1)); fi',
+      '    [ "$had_ip" -eq 1 ] && lost=$((lost+1))',
       "  fi",
-      // 网络判据（主判据，三路探测任一为真即算在线）：
-      // a) wlan 接口有 IPv4 地址 —— Wi-Fi 一关/一断 DHCP 地址立即回收，最快最可靠；
-      // b) ip route 主表有 wlan 默认路由；
-      // c) /proc/net/route 主表有 wlan 默认路由（老设备兜底）。
-      // 只有见过在线（rseen=1）之后掉线才计数，避免探测全失效的手机被误杀。
-      // 另有网关 ping（路由在但网关死，比如路由器断电）：从未 ping 通过的不计数（pfc），
-      // 累计 5 次判定 ICMP 被屏蔽，退回只看在线判据+心跳。
-      "  netup=0",
-      "  ip -4 addr show \"$IFACE\" 2>/dev/null | grep -q 'inet ' && netup=1",
-      '  [ "$netup" -eq 0 ] && ip route 2>/dev/null | grep -q \'^default.*dev wlan\' && netup=1',
-      "  [ \"$netup\" -eq 0 ] && grep -q '^wlan[0-9]*[[:space:]]*00000000' /proc/net/route 2>/dev/null && netup=1",
-      '  if [ "$netup" -eq 1 ]; then',
-      '    rseen=1',
-      '    if [ -n "$GW" ]; then',
-      '      if ping -c 1 -W 1 "$GW" >/dev/null 2>&1; then netfail=0; neton=1',
-      '      elif [ "$neton" -eq 1 ]; then netfail=$((netfail+1)); else pfc=$((pfc+1)); fi',
-      "    else",
-      '      netfail=0',
-      "    fi",
-      '  elif [ "$rseen" -eq 1 ]; then',
-      '    netfail=$((netfail+1))',
+      '  dead=0; why=""',
+      '  if [ "$lost" -ge 2 ]; then dead=1; why="wifi ip gone x$lost"; fi',
+      '  if [ -n "$hb_ts" ]; then',
+      "    age=$((now - hb_ts))",
+      '    if [ "$age" -gt "$STALE" ]; then dead=1; why="heartbeat ${age}s stale"; fi',
       "  fi",
-      '  if [ "$pfc" -ge 5 ] && [ "$neton" -eq 0 ]; then log "gw icmp blocked, fallback"; GW=""; pfc=0; netfail=0; fi',
-      '  dead=0; reason=""',
-      '  if [ "$netfail" -ge 3 ]; then dead=1; reason="net down (fail x$netfail)"; fi',
-      '  if [ "$seen" -eq 1 ] && [ "$n" -ge 2 ]; then dead=1; reason="port gone"; fi',
-      '  if [ -n "$hb" ] && [ $((now-hb)) -gt 45 ]; then dead=1; reason="heartbeat $((now-hb))s stale"; fi',
+      // 布防前一定先写心跳：读不到就是异常（写失败 / 文件被清），按失联处理，别让手机哑着
+      '  if [ "$hb_seen" -eq 0 ] && [ "$tick" -ge $((IDLE / 2)) ]; then dead=1; why="no heartbeat in ${IDLE}s"; fi',
       '  if [ "$dead" -eq 1 ]; then',
-      '    log "link dead ($reason) -> release scrcpy"',
+      '    log "session dead ($why) -> release scrcpy"',
       '    pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null',
-      "    sleep 2",
+      "    sleep 1",
       '    pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null',
       '    pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null',
-      "    sleep 1",
-      // 与网页端「强力恢复」一致的安全序列（不含会搞坏媒体时钟的 audioserver 重启）：
-      // 关勿扰 -> 直接设媒体音量(AudioService 重算路由) -> 播放/暂停(音频焦点重申请)。
-      // 注意：不按音量键 —— 音量键会弹音量条且可能改变用户音量（用户明确要求去掉）；
-      // 音量归零的场景已由 media volume --set 10 覆盖。
-      '    settings put global zen_mode 0 >/dev/null 2>&1',
-      '    media volume --stream 3 --set 10 >/dev/null 2>&1',
-      '    input keyevent 126 >/dev/null 2>&1',
-      "    sleep 0.5",
-      '    input keyevent 127 >/dev/null 2>&1',
+      // 只做净音量不变的「路由刷新」：不动勿扰、不按键、不改用户音量
+      "    " + AUDIO_ROUTE_CMD,
       '    remain=$(ps -A 2>/dev/null | grep -c "[c]om.genymobile.scrcpy")',
-      '    log "released, remain=$remain"',
+      '    log "released remain=$remain"',
       "    exit 0",
       "  fi",
-      "  t=$((t+1))",
-      '  if [ "$seen" -eq 0 ] && [ "$hbSeen" -eq 0 ] && [ "$t" -ge 300 ]; then log "no signal 10min, exit"; exit 0; fi',
       "  sleep 2",
       "done",
     ];
@@ -794,15 +738,11 @@ export class AdbMirror {
   }
 
   async isAudioGuardAlive() {
-    if (!this.adb) return false;
-    // 不再用 ps -A | grep：Android 的 ps 默认只显示进程名不显示完整参数，
-    // panda_guard.sh 永远匹配不到 -> 把活着误判成没启动（v3.0.12 的误报根因）。
-    // 改用运行标记：看门狗每轮循环都会把当前时间写进 RUN 文件（tmpfs，无闪存损耗），
-    // 12 秒内更新过 = 活着。
+    if (!this.adb || !this._guardSession) return false;
+    // 用运行标记判活：ps 在 Android 上只显示进程名、匹配不到脚本参数（v3.0.12 的误报根因）
     const out = await this.deviceShell(
-      "now=$(date +%s); r=$(cat " + AUDIO_GUARD_RUN + " 2>/dev/null); " +
-      'r=$(echo "$r" | tr -dc "0-9"); ' +
-      'if [ -n "$r" ] && [ $((now-r)) -lt 12 ]; then echo ALIVE; else echo DEAD; fi',
+      "now=$(date +%s); r=$(cat " + guardRunPath(this._guardSession) + " 2>/dev/null); r=${r%% *}; " +
+        'case "$r" in ""|*[!0-9]*) echo DEAD ;; *) [ $((now-r)) -lt 25 ] && echo ALIVE || echo DEAD ;; esac',
       5000
     );
     return /ALIVE/.test(String(out || "").trim());
@@ -812,17 +752,20 @@ export class AdbMirror {
   async readAudioGuardLog(lines = 8) {
     if (!this.adb) return "";
     const out = await this.deviceShell(
-      "tail -n " + lines + " " + AUDIO_GUARD_LOG + " 2>/dev/null",
+      "tail -n " + lines + " " + GUARD_LOG + " 2>/dev/null",
       5000
     );
     return String(out || "").trim();
   }
 
-  /** 给手机端看门狗喂心跳（写入手机本地时间戳） */
+  /** 给手机端看门狗喂心跳：写入「本地时间戳 + 会话号」，写成功即证明通道还活着 */
   async heartbeat() {
-    if (!this.adb) return false;
+    if (!this.adb || !this._guardSession) return false;
     try {
-      await this.deviceShell("echo $(date +%s) > " + AUDIO_GUARD_HB, 5000);
+      await this.deviceShell(
+        "echo \"$(date +%s) " + this._guardSession + "\" > " + guardHbPath(this._guardSession),
+        5000
+      );
       return true;
     } catch {
       return false;
@@ -838,16 +781,38 @@ export class AdbMirror {
     );
   }
 
+  /**
+   * 主动收尾（停止投屏 / 断线后仍能连上手机时）：看门狗退场 + scrcpy 结束 + 路由刷新。
+   * 一次 shell 跑完，替换原来 stopAudioGuard → kill（含 2 次 sleep）→ refresh 的串行往返。
+   */
+  async releaseSessionOnDevice() {
+    if (!this.adb) return false;
+    this._guardSession = "";
+    const out = String(
+      (await this.deviceShell(
+        'pkill -TERM -f "[p]anda_guard.sh" 2>/dev/null; ' +
+          'pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.45; ' +
+          'pkill -9 -f "[p]anda_guard.sh" 2>/dev/null; ' +
+          'pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; ' +
+          'pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; ' +
+          AUDIO_ROUTE_CMD + "; " +
+          'echo "REMAIN=$(ps -A 2>/dev/null | grep -c \'[c]om.genymobile.scrcpy\')"',
+        15000
+      )) || ""
+    );
+    const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+    if (remain) this.onLog("手机端 scrcpy 仍在运行（" + remain + " 个进程），音频可能仍被占用");
+    return remain === 0;
+  }
+
   /** 终止手机端 scrcpy 并刷新音频路由（它会占着音频采集，导致手机一直没声音） */
   async releaseScrcpyOnDevice() {
     if (!this.adb) return false;
     try {
-      const ok = await Promise.race([
-        this.killScrcpyServerOnDevice(),
+      return await Promise.race([
+        this.releaseSessionOnDevice(),
         new Promise((resolve) => setTimeout(() => resolve(false), 12000)),
       ]);
-      if (ok) await this.refreshAudioRoute();
-      return ok === true;
     } catch {
       return false;
     }
@@ -880,10 +845,7 @@ export class AdbMirror {
       this.adb = conn.adb;
       const glog = await this.readAudioGuardLog(8);
       if (glog) this.onLog("看门狗日志：" + glog.replace(/\n/g, " | "));
-      const ok = await this.killScrcpyServerOnDevice();
-      // 顺便把看门狗也收掉，避免它以后又来杀进程
-      await this.stopAudioGuard();
-      if (ok) await this.refreshAudioRoute();
+      const ok = await this.releaseSessionOnDevice();
       this.onLog(ok ? "已结束手机端 scrcpy 并刷新音频路由" : "未能结束手机端 scrcpy，音频可能仍被占用");
       return ok;
     } catch (e) {
@@ -972,9 +934,7 @@ export class AdbMirror {
         } else {
           this.onLog("看门狗未留下日志：本轮可能未启动成功（若日志常出现此行请反馈）");
         }
-        const ok = await this.killScrcpyServerOnDevice();
-        await this.stopAudioGuard();
-        if (ok) await this.refreshAudioRoute();
+        const ok = await this.releaseSessionOnDevice();
         this._lateActive = false;
         this.onLog(
           ok
@@ -1153,7 +1113,14 @@ export class AdbMirror {
 
     // 不改动手机的系统设置（锁屏时间 / 屏保），保持用户原样。
     // 需要常亮请用「保持唤醒」(scrcpy stay_awake)，它只在本次会话生效。
-    const sdk = await this.getAndroidSdk();
+    // prepareDevice 一次 shell 完成「清上一轮 scrcpy/看门狗 + 读 SDK」，省掉 3~4 个往返
+    let prep = { sdk: 0, remain: 0 };
+    try {
+      prep = await this.prepareDevice();
+    } catch (e) {
+      this.onLog("启动前清理异常（不影响继续连接）：" + (e?.message || e));
+    }
+    const sdk = prep.sdk || (await this.getAndroidSdk());
     const camMode = String(o.videoSource || "display").startsWith("camera");
     // 声音输出三态：both=手机+电脑 / phone=仅手机(不转发) / pc=仅电脑(手机静音)
     const audioMode = o.audioMode || "both";
@@ -1175,10 +1142,14 @@ export class AdbMirror {
       );
     }
 
-    // 清掉上一轮残留（手机端 scrcpy + 看门狗），再布防本轮的看门狗
-    await this.stopAudioGuard();
-    await this.killScrcpyServerOnDevice();
-    if (this._wirelessTarget) await this.deployAudioGuard();
+    // 上一轮的 scrcpy / 看门狗已由 prepareDevice 在一次 shell 里清掉。
+    // 无线的看门狗布防改为与 scrcpy 启动并行：原来它是串行 6 个往返 + 2 次 sleep，是连接慢的主因。
+    const guardTask = this._wirelessTarget
+      ? this.deployAudioGuard().catch((e) => {
+          this.onLog("看门狗布防异常（不影响投屏）：" + (e?.message || e));
+          return false;
+        })
+      : Promise.resolve(false);
     await this.pushServer();
     this._mountRenderer();
 
@@ -1242,6 +1213,10 @@ export class AdbMirror {
     }
     this.client = await AdbScrcpyClient.start(this.adb, DefaultServerPath, options);
     if (!this.client) throw new MirrorError("scrcpy 客户端启动失败", "SCRCPY_FAIL");
+    if (this._wirelessTarget) {
+      const guardReady = await guardTask;
+      this.onLog(guardReady ? "看门狗布防完成（与启动并行，不占连接时间）" : "看门狗未布防，断网时只能靠重连后清理");
+    }
 
     const logSink = (msg) => this.onLog(String(msg));
     this.client.output
@@ -1425,10 +1400,13 @@ export class AdbMirror {
     this.deviceController = null;
     try { await this.audio?.stop(); } catch { /* ignore */ }
     this.audio = new AudioMirror();
-    try { await this._wirelessDispose?.(); } catch { /* ignore */ }
-    this._wirelessDispose = null;
+    // 顺序很重要：先让 scrcpy 收尾、再在手机端一次性清理，最后才断 ADB / 无线通道。
+    // 旧版先把无线通道 dispose 掉，清理命令发不出去，只能等看门狗兜底。
     try {
-      await this.client?.close();
+      await Promise.race([
+        this.client?.close(),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
     } catch {
       /* ignore */
     }
@@ -1436,15 +1414,17 @@ export class AdbMirror {
     // 主动停止同样清空舞台画面（与断线路径一致：断开即无画面）
     this._teardownRenderer();
     try {
-      await this.stopAudioGuard();
-      const ok = await this.killScrcpyServerOnDevice();
-      if (ok) await this.refreshAudioRoute();
-      // 给手机一点时间释放音频采集，再断开 ADB，避免残留静音
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      await this.adb?.close();
+      if (this.adb) {
+        await Promise.race([
+          this.releaseSessionOnDevice(),
+          new Promise((resolve) => setTimeout(resolve, 6000)),
+        ]);
+      }
     } catch {
       /* ignore */
     }
+    try { await this._wirelessDispose?.(); } catch { /* ignore */ }
+    this._wirelessDispose = null;
     this.adb = null;
     // 主动停止后一定要把 WebUSB 句柄也还回去，否则下一次点连接会撞自己造成的 DeviceBusy
     try {
@@ -1498,6 +1478,7 @@ export class AdbMirror {
       this._wirelessTarget = "";
       this._wirelessLastRecv = null;
       this._wirelessServerUploaded = "";
+      this._guardSession = "";
       await this.requestDevice(preferSerial);
       await this.connectAndAuth();
       await this.startStream();
@@ -1524,6 +1505,7 @@ export class AdbMirror {
       };
       this._usbDispose = info.dispose;
       this._wirelessTarget = "";
+      this._guardSession = "";
       await prepareUsbServer(info.serial, (s) => this.status(s));
       this._usbServerUploaded = info.serial;
       await this.startStream();
@@ -1536,14 +1518,18 @@ export class AdbMirror {
   async startWireless(target, opts) {
     if (this._starting) return;
     this._starting = true;
+    const t0 = performance.now();
     try {
       this._opts = opts || {};
       this._wirelessTarget = target;
       this._wirelessServerUploaded = "";
+      this._guardSession = "";
       this.status("无线上传中…");
       await this.pushServerWireless(target);
+      const t1 = performance.now();
       this.status("无线连接中…");
       const { adb, dispose, lastRecv } = await connectWireless(target, (s) => this.status(s));
+      const t2 = performance.now();
       this.adb = adb;
       this._wirelessDispose = dispose;
       this._wirelessLastRecv = lastRecv || null;
@@ -1554,6 +1540,11 @@ export class AdbMirror {
         rawDevice: null,
       };
       await this.startStream();
+      const t3 = performance.now();
+      const sec = (from, to) => ((to - from) / 1000).toFixed(1);
+      this.onLog(
+        `无线连接耗时 ${sec(t0, t3)}s（预上传 ${sec(t0, t1)}s / 握手 ${sec(t1, t2)}s / 启动 ${sec(t2, t3)}s）`
+      );
     } finally {
       this._starting = false;
     }

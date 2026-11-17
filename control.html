@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>scrcpy 便捷网页版 · 监视器 v4.0.11</title>
+    <title>scrcpy 便捷网页版 · 监视器 v4.0.12</title>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" type="image/x-icon" href="./assets/custom-icon.ico" />
-    <link rel="stylesheet" href="./css/app.css?v=4.0.11-ui11" />
+    <link rel="stylesheet" href="./css/app.css?v=4.0.12-ui14" />
   </head>
   <body>
     <div class="app" id="app">
@@ -36,28 +36,11 @@
             </div>
           </div>
         </main>
-
-        <!-- ===== 四角 HUD ===== -->
-        <div class="hud hud-tl" aria-hidden="true">
-          <span class="hud-live"><i></i><b>CH 01</b> DEVICE FEED</span>
-          <span class="hud-sub">ADB · H.264 / WEBCODECS</span>
-        </div>
-        <div class="hud hud-tr">
-          <span class="hud-metric"><i>RES</i><b id="stat-res">—</b></span>
-          <span class="hud-metric"><i>FPS</i><b id="stat-fps">—</b></span>
-        </div>
-        <div class="hud hud-bl">
-          <span id="stat-serial">设备:—</span>
-          <span id="audio-hint">声音:—</span>
-        </div>
-        <div class="hud hud-br" aria-hidden="true">
-          <span class="hud-metric"><i>VIEW</i><b id="zoom-readout">FIT</b></span>
-          <span class="hud-sub">AUTO / CONTAIN</span>
-        </div>
+        <!-- 四角读数已移到左侧栏底部（#hud-dock），画面内不再叠加任何信息 -->
 
         <!-- ===== 左侧工具轨 ===== -->
         <nav class="rail" id="rail" aria-label="控制台">
-          <div class="rail-brand" title="scrcpy 便捷网页版 v4.0.11">
+          <div class="rail-brand" title="scrcpy 便捷网页版 v4.0.12">
             <span class="rail-logo"><img src="./assets/logo.png" alt="scrcpy 便捷网页版" /></span>
             <span class="rail-ver">3.0</span>
           </div>
@@ -298,6 +281,26 @@
             <div class="fs-text"><label>文本上屏</label><textarea id="fs-input" rows="2" placeholder="输入汉字/英文,选完自动上屏"></textarea></div>
             <button data-act="stop" class="stop" type="button"><span class="lbl3">停止投屏</span></button>
           </div>
+
+          <!-- ===== 侧栏底部读数条（画面内不再显示任何数字） ===== -->
+          <aside class="hud-dock" id="hud-dock" aria-hidden="true">
+            <div class="hud hud-tl">
+              <span class="hud-live"><i></i><b>CH 01</b> DEVICE FEED</span>
+              <span class="hud-sub">H.264 / WEBCODECS</span>
+            </div>
+            <div class="hud hud-tr">
+              <span class="hud-metric"><i>RES</i><b id="stat-res">—</b></span>
+              <span class="hud-metric"><i>FPS</i><b id="stat-fps">—</b></span>
+            </div>
+            <div class="hud hud-bl">
+              <span id="stat-serial">设备:—</span>
+              <span id="audio-hint">声音:—</span>
+            </div>
+            <div class="hud hud-br">
+              <span class="hud-metric"><i>VIEW</i><b id="zoom-readout">FIT</b></span>
+              <span class="hud-sub">AUTO / CONTAIN</span>
+            </div>
+          </aside>
         </div>
 
         <button class="focus-exit" id="btn-focus-exit" type="button" aria-label="退出沉浸模式">
@@ -323,7 +326,7 @@
     </div>
 
     <div class="toast-root" id="toast-root"></div>
-    <script src="./js/mirror.bundle.js?v=4.0.11"></script>
+    <script src="./js/mirror.bundle.js?v=4.0.12"></script>
     <script>
       (() => {
         const app = document.getElementById("app");

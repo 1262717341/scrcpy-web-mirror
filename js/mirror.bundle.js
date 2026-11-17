@@ -33,9 +33,9 @@
     mod
   ));
 
-  // node_modules/yuv-buffer/yuv-buffer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-buffer/yuv-buffer.js
   var require_yuv_buffer = __commonJS({
-    "node_modules/yuv-buffer/yuv-buffer.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-buffer/yuv-buffer.js"(exports, module) {
       var YUVBuffer = {
         /**
          * Validate a plane dimension
@@ -226,9 +226,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/FrameSink.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/FrameSink.js
   var require_FrameSink = __commonJS({
-    "node_modules/yuv-canvas/src/FrameSink.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/FrameSink.js"(exports, module) {
       (function() {
         "use strict";
         function FrameSink(canvas, options) {
@@ -245,9 +245,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/depower.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/depower.js
   var require_depower = __commonJS({
-    "node_modules/yuv-canvas/src/depower.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/depower.js"(exports, module) {
       (function() {
         "use strict";
         function depower(ratio) {
@@ -266,9 +266,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/YCbCr.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/YCbCr.js
   var require_YCbCr = __commonJS({
-    "node_modules/yuv-canvas/src/YCbCr.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/YCbCr.js"(exports, module) {
       (function() {
         "use strict";
         var depower = require_depower();
@@ -345,9 +345,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/SoftwareFrameSink.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/SoftwareFrameSink.js
   var require_SoftwareFrameSink = __commonJS({
-    "node_modules/yuv-canvas/src/SoftwareFrameSink.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/SoftwareFrameSink.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), YCbCr = require_YCbCr();
@@ -411,9 +411,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/build/shaders.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/build/shaders.js
   var require_shaders = __commonJS({
-    "node_modules/yuv-canvas/build/shaders.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/build/shaders.js"(exports, module) {
       module.exports = {
         vertex: "precision mediump float;\n\nattribute vec2 aPosition;\nattribute vec2 aLumaPosition;\nattribute vec2 aChromaPosition;\nvarying vec2 vLumaPosition;\nvarying vec2 vChromaPosition;\nvoid main() {\n    gl_Position = vec4(aPosition, 0, 1);\n    vLumaPosition = aLumaPosition;\n    vChromaPosition = aChromaPosition;\n}\n",
         fragment: "// inspired by https://github.com/mbebenita/Broadway/blob/master/Player/canvas.js\n\nprecision mediump float;\n\nuniform sampler2D uTextureY;\nuniform sampler2D uTextureCb;\nuniform sampler2D uTextureCr;\nvarying vec2 vLumaPosition;\nvarying vec2 vChromaPosition;\nvoid main() {\n   // Y, Cb, and Cr planes are uploaded as ALPHA textures.\n   float fY = texture2D(uTextureY, vLumaPosition).w;\n   float fCb = texture2D(uTextureCb, vChromaPosition).w;\n   float fCr = texture2D(uTextureCr, vChromaPosition).w;\n\n   // Premultipy the Y...\n   float fYmul = fY * 1.1643828125;\n\n   // And convert that to RGB!\n   gl_FragColor = vec4(\n     fYmul + 1.59602734375 * fCr - 0.87078515625,\n     fYmul - 0.39176171875 * fCb - 0.81296875 * fCr + 0.52959375,\n     fYmul + 2.017234375   * fCb - 1.081390625,\n     1\n   );\n}\n",
@@ -423,9 +423,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/WebGLFrameSink.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/WebGLFrameSink.js
   var require_WebGLFrameSink = __commonJS({
-    "node_modules/yuv-canvas/src/WebGLFrameSink.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/WebGLFrameSink.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), shaders = require_shaders();
@@ -868,9 +868,9 @@
     }
   });
 
-  // node_modules/yuv-canvas/src/yuv-canvas.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/yuv-canvas/src/yuv-canvas.js
   var require_yuv_canvas = __commonJS({
-    "node_modules/yuv-canvas/src/yuv-canvas.js"(exports, module) {
+    "../scrcpy\u4FBF\u6377\u7F51\u9875\u7248v4.0.10/node_modules/yuv-canvas/src/yuv-canvas.js"(exports, module) {
       (function() {
         "use strict";
         var FrameSink = require_FrameSink(), SoftwareFrameSink = require_SoftwareFrameSink(), WebGLFrameSink = require_WebGLFrameSink();
@@ -904,7 +904,7 @@
     }
   });
 
-  // node_modules/@yume-chan/async/esm/promise-resolver.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/promise-resolver.js
   var PromiseResolver = class {
     #promise;
     get promise() {
@@ -932,7 +932,7 @@
     };
   };
 
-  // node_modules/@yume-chan/async/esm/async-operation-manager.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/async-operation-manager.js
   var AsyncOperationManager = class {
     nextId;
     pendingResolvers = /* @__PURE__ */ new Map();
@@ -971,19 +971,19 @@
     }
   };
 
-  // node_modules/@yume-chan/async/esm/delay.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/delay.js
   function delay(time) {
     return new Promise((resolve) => {
       globalThis.setTimeout(() => resolve(), time);
     });
   }
 
-  // node_modules/@yume-chan/async/esm/maybe-promise.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/async/esm/maybe-promise.js
   function isPromiseLike(value) {
     return typeof value === "object" && value !== null && "then" in value;
   }
 
-  // node_modules/@yume-chan/struct/esm/bipedal.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/bipedal.js
   function advance(iterator, next) {
     while (true) {
       const { done, value } = iterator.next(next);
@@ -1019,7 +1019,7 @@
     }
   }
 
-  // node_modules/@yume-chan/struct/esm/field/serialize.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/field/serialize.js
   function defaultFieldSerializer(serializer) {
     return (source, context) => {
       if ("buffer" in context) {
@@ -1049,7 +1049,7 @@
     };
   }
 
-  // node_modules/@yume-chan/struct/esm/field/factory.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/field/factory.js
   // @__NO_SIDE_EFFECTS__
   function _field(size, type, serialize3, deserialize, options) {
     const field2 = {
@@ -1066,7 +1066,7 @@
   }
   var field = _field;
 
-  // node_modules/@yume-chan/struct/esm/buffer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/buffer.js
   var EmptyUint8Array = new Uint8Array(0);
   function copyMaybeDifferentLength(dest, source, index, length) {
     if (source.length < length) {
@@ -1212,7 +1212,7 @@
     return field(0, "default", (source) => source, deserialize, { init });
   }
 
-  // node_modules/@yume-chan/struct/esm/readable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/readable.js
   var ExactReadableEndedError = class extends Error {
     constructor() {
       super("ExactReadable ended");
@@ -1238,7 +1238,7 @@
     }
   };
 
-  // node_modules/@yume-chan/struct/esm/struct.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/struct.js
   var StructDeserializeError = class extends Error {
     constructor(message) {
       super(message);
@@ -1369,7 +1369,7 @@
     };
   }
 
-  // node_modules/@yume-chan/struct/esm/extend.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/extend.js
   // @__NO_SIDE_EFFECTS__
   function extend(base, fields, options) {
     return struct(Object.assign({}, base.fields, fields), {
@@ -1379,7 +1379,7 @@
     });
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/int16.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int16.js
   // @__NO_SIDE_EFFECTS__
   function getInt16(buffer2, offset, littleEndian) {
     return littleEndian ? (buffer2[offset] | buffer2[offset + 1] << 8) << 16 >> 16 : (buffer2[offset] << 8 | buffer2[offset + 1]) << 16 >> 16;
@@ -1394,7 +1394,7 @@
     }
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/int32.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int32.js
   // @__NO_SIDE_EFFECTS__
   function getInt32(buffer2, offset, littleEndian) {
     return littleEndian ? buffer2[offset] | buffer2[offset + 1] << 8 | buffer2[offset + 2] << 16 | buffer2[offset + 3] << 24 : buffer2[offset] << 24 | buffer2[offset + 1] << 16 | buffer2[offset + 2] << 8 | buffer2[offset + 3];
@@ -1413,7 +1413,7 @@
     }
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/int64.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/int64.js
   function setInt64LittleEndian(buffer2, offset, value) {
     buffer2[offset] = Number(value & 0xffn);
     buffer2[offset + 1] = Number(value >> 8n & 0xffn);
@@ -1435,7 +1435,7 @@
     buffer2[offset + 7] = Number(value & 0xffn);
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/uint16.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint16.js
   // @__NO_SIDE_EFFECTS__
   function getUint16BigEndian(buffer2, offset) {
     return buffer2[offset] << 8 | buffer2[offset + 1];
@@ -1454,7 +1454,7 @@
     }
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/uint32.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint32.js
   // @__NO_SIDE_EFFECTS__
   function getUint32LittleEndian(buffer2, offset) {
     return (buffer2[offset] | buffer2[offset + 1] << 8 | buffer2[offset + 2] << 16 | buffer2[offset + 3] << 24) >>> 0;
@@ -1487,7 +1487,7 @@
     }
   }
 
-  // node_modules/@yume-chan/no-data-view/esm/uint64.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/no-data-view/esm/uint64.js
   function getUint64BigEndian(buffer2, offset) {
     return BigInt(buffer2[offset]) << 56n | BigInt(buffer2[offset + 1]) << 48n | BigInt(buffer2[offset + 2]) << 40n | BigInt(buffer2[offset + 3]) << 32n | BigInt(buffer2[offset + 4]) << 24n | BigInt(buffer2[offset + 5]) << 16n | BigInt(buffer2[offset + 6]) << 8n | BigInt(buffer2[offset + 7]);
   }
@@ -1516,7 +1516,7 @@
     }
   }
 
-  // node_modules/@yume-chan/struct/esm/number.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/number.js
   // @__NO_SIDE_EFFECTS__
   function number(size, serialize3, deserialize) {
     const fn = (() => fn);
@@ -1554,7 +1554,7 @@
     return getUint64(data, 0, littleEndian);
   });
 
-  // node_modules/@yume-chan/struct/esm/utils.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/utils.js
   var { TextEncoder: TextEncoder2, TextDecoder: TextDecoder2 } = globalThis;
   var SharedEncoder = /* @__PURE__ */ new TextEncoder2();
   var SharedDecoder = /* @__PURE__ */ new TextDecoder2();
@@ -1567,7 +1567,7 @@
     return SharedDecoder.decode(buffer2);
   }
 
-  // node_modules/@yume-chan/struct/esm/string.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/struct/esm/string.js
   var string = (/* @__NO_SIDE_EFFECTS__ */ (lengthOrField) => {
     const field2 = buffer(lengthOrField, {
       convert: decodeUtf8,
@@ -1577,7 +1577,7 @@
     return field2;
   });
 
-  // node_modules/@yume-chan/stream-extra/esm/stream.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/stream.js
   var { AbortController: AbortController2 } = globalThis;
   var ReadableStream2 = /* @__PURE__ */ (() => {
     const { ReadableStream: ReadableStream3 } = globalThis;
@@ -1624,7 +1624,7 @@
   })();
   var { WritableStream, TransformStream: TransformStream2 } = globalThis;
 
-  // node_modules/@yume-chan/stream-extra/esm/task-queue.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/task-queue.js
   var TaskQueue = class {
     #ready;
     #disposed = false;
@@ -1673,7 +1673,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/push-readable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/push-readable.js
   var PushReadableStream = class extends ReadableStream2 {
     /**
      * Create a new `PushReadableStream` from a source.
@@ -1857,7 +1857,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/try-close.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/try-close.js
   function tryClose(value) {
     try {
       const result = value.close();
@@ -1878,7 +1878,7 @@
     }
   }
 
-  // node_modules/@yume-chan/stream-extra/esm/buffered.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/buffered.js
   var BufferedReadableStream = class {
     #buffered;
     // PERF: `subarray` is slow
@@ -2020,7 +2020,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/buffered-transform.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/buffered-transform.js
   var BufferedTransformStream = class {
     #readable;
     get readable() {
@@ -2070,7 +2070,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/concat.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/concat.js
   var ConcatStringStream = class {
     // PERF: rope (concat strings) is faster than `[].join('')`
     #result = "";
@@ -2176,7 +2176,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/consumable/readable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/readable.js
   var ConsumableReadableStream = class _ConsumableReadableStream extends ReadableStream2 {
     static async enqueue(controller, chunk) {
       const output = new Consumable(chunk);
@@ -2222,7 +2222,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/consumable/wrap-byte-readable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/wrap-byte-readable.js
   var ConsumableWrapByteReadableStream = class extends ReadableStream2 {
     constructor(stream, chunkSize, min) {
       const reader = stream.getReader({ mode: "byob" });
@@ -2244,7 +2244,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/consumable/wrap-writable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/wrap-writable.js
   var ConsumableWrapWritableStream = class extends WritableStream {
     constructor(stream) {
       const writer = stream.getWriter();
@@ -2262,7 +2262,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/consumable/writable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable/writable.js
   var ConsumableWritableStream = class extends WritableStream {
     static async write(writer, value) {
       const consumable = new Consumable(value);
@@ -2299,7 +2299,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/task.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/task.js
   var { console: console2 } = globalThis;
   var createTask = /* @__PURE__ */ (() => console2?.createTask?.bind(console2) ?? (() => ({
     run(callback) {
@@ -2307,7 +2307,7 @@
     }
   })))();
 
-  // node_modules/@yume-chan/stream-extra/esm/consumable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/consumable.js
   var Consumable = class {
     static WritableStream = ConsumableWritableStream;
     static WrapWritableStream = ConsumableWrapWritableStream;
@@ -2351,7 +2351,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/index.js
   var maybe_consumable_exports = {};
   __export(maybe_consumable_exports, {
     WrapWritableStream: () => MaybeConsumableWrapWritableStream,
@@ -2360,7 +2360,7 @@
     tryConsume: () => tryConsume
   });
 
-  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/utils.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/utils.js
   function getValue(value) {
     return value instanceof Consumable ? value.value : value;
   }
@@ -2372,7 +2372,7 @@
     }
   }
 
-  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/wrap-writable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/wrap-writable.js
   var MaybeConsumableWrapWritableStream = class extends WritableStream {
     constructor(stream) {
       const writer = stream.getWriter();
@@ -2390,7 +2390,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/maybe-consumable/writable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/maybe-consumable/writable.js
   var MaybeConsumableWritableStream = class extends WritableStream {
     constructor(sink, strategy) {
       let wrappedStrategy;
@@ -2422,7 +2422,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/distribution.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/distribution.js
   var BufferCombiner = class {
     #capacity;
     #buffer;
@@ -2518,7 +2518,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/wrap-readable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/wrap-readable.js
   function getWrappedReadableStream(wrapper, controller) {
     if ("start" in wrapper) {
       return wrapper.start(controller);
@@ -2564,7 +2564,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/duplex.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/duplex.js
   var NOOP = () => {
   };
   var DuplexStreamFactory = class {
@@ -2635,12 +2635,12 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/encoding.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/encoding.js
   var Global = globalThis;
   var TextDecoderStream = Global.TextDecoderStream;
   var TextEncoderStream = Global.TextEncoderStream;
 
-  // node_modules/@yume-chan/stream-extra/esm/inspect.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/inspect.js
   var InspectStream = class extends TransformStream2 {
     constructor(callback) {
       super({
@@ -2652,7 +2652,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/pipe-from.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/pipe-from.js
   function pipeFrom(writable, pair) {
     const writer = pair.writable.getWriter();
     const pipe = pair.readable.pipeTo(writable);
@@ -2667,7 +2667,7 @@
     });
   }
 
-  // node_modules/@yume-chan/stream-extra/esm/split-string.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/split-string.js
   var SplitStringStream = class extends TransformStream2 {
     constructor(separator) {
       let remaining = void 0;
@@ -2697,7 +2697,7 @@
     }
   };
 
-  // node_modules/@yume-chan/stream-extra/esm/struct-deserialize.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/stream-extra/esm/struct-deserialize.js
   var StructDeserializeStream = class extends BufferedTransformStream {
     constructor(struct2) {
       super((stream) => {
@@ -2706,7 +2706,7 @@
     }
   };
 
-  // node_modules/@yume-chan/event/esm/disposable.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/disposable.js
   var AutoDisposable = class {
     #disposables = [];
     constructor() {
@@ -2724,7 +2724,7 @@
     }
   };
 
-  // node_modules/@yume-chan/event/esm/event-emitter.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/event-emitter.js
   var EventEmitter = class {
     listeners = [];
     constructor() {
@@ -2759,7 +2759,7 @@
     }
   };
 
-  // node_modules/@yume-chan/event/esm/sticky-event-emitter.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/event/esm/sticky-event-emitter.js
   var Undefined = /* @__PURE__ */ Symbol("undefined");
   var StickyEventEmitter = class extends EventEmitter {
     #value = Undefined;
@@ -2775,7 +2775,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/base.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/base.js
   var AdbServiceBase = class extends AutoDisposable {
     #adb;
     get adb() {
@@ -2787,7 +2787,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/framebuffer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/framebuffer.js
   var Version = struct({ version: u32 }, { littleEndian: true });
   var AdbFrameBufferV1 = struct({
     bpp: u32,
@@ -2857,7 +2857,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/power.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/power.js
   var AdbPower = class extends AdbServiceBase {
     reboot(mode2 = "") {
       return this.adb.createSocketAndWait(`reboot:${mode2}`);
@@ -2903,7 +2903,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/utils/array-buffer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/array-buffer.js
   function toLocalUint8Array(value) {
     if (value.buffer instanceof ArrayBuffer) {
       return value;
@@ -2913,7 +2913,7 @@
     return copy;
   }
 
-  // node_modules/@yume-chan/adb/esm/utils/auto-reset-event.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/auto-reset-event.js
   var AutoResetEvent = class {
     #set;
     #queue = [];
@@ -2946,7 +2946,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/utils/base64.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/base64.js
   var [charToIndex, indexToChar, paddingChar] = /* @__PURE__ */ (() => {
     const charToIndex2 = [];
     const indexToChar2 = [];
@@ -3081,7 +3081,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb/esm/utils/hex.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/hex.js
   function hexCharToNumber(char) {
     if (char < 48) {
       throw new TypeError(`Invalid hex char ${char}`);
@@ -3111,14 +3111,14 @@
     return result;
   }
 
-  // node_modules/@yume-chan/adb/esm/utils/no-op.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/no-op.js
   var NOOP2 = /* @__NO_SIDE_EFFECTS__ */ () => {
   };
   function unreachable(...args) {
     throw new Error("Unreachable. Arguments:\n" + args.join("\n"));
   }
 
-  // node_modules/@yume-chan/adb/esm/utils/sequence-equal.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/utils/sequence-equal.js
   function sequenceEqual(a, b) {
     if (a.length !== b.length) {
       return false;
@@ -3131,7 +3131,7 @@
     return true;
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/reverse.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/reverse.js
   var AdbReverseStringResponse = struct({
     length: string(4),
     content: string({
@@ -3253,7 +3253,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/process.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/process.js
   var AdbNoneProtocolProcessImpl = class {
     #socket;
     get stdin() {
@@ -3285,7 +3285,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/pty.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/pty.js
   var AdbNoneProtocolPtyProcess = class {
     #socket;
     #writer;
@@ -3314,7 +3314,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/utils.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/utils.js
   function escapeArg(s) {
     let result = "";
     result += `'`;
@@ -3369,7 +3369,7 @@
     return result;
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/spawner.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/spawner.js
   var AdbNoneProtocolSpawner = class {
     #spawn;
     constructor(spawn) {
@@ -3392,7 +3392,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/none/service.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/none/service.js
   var AdbNoneProtocolSubprocessService = class extends AdbNoneProtocolSpawner {
     #adb;
     get adb() {
@@ -3422,7 +3422,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/features.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/features.js
   var AdbFeature = {
     ShellV2: "shell_v2",
     Cmd: "cmd",
@@ -3435,7 +3435,7 @@
     DelayedAck: "delayed_ack"
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/shared.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/shared.js
   var AdbShellProtocolId = {
     Stdin: 0,
     Stdout: 1,
@@ -3449,7 +3449,7 @@
     data: buffer(u32)
   }, { littleEndian: true });
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/process.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/process.js
   var AdbShellProtocolProcessImpl = class {
     #socket;
     #writer;
@@ -3534,7 +3534,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/pty.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/pty.js
   var AdbShellProtocolPtyProcess = class {
     #socket;
     #writer;
@@ -3602,7 +3602,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/spawner.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/spawner.js
   var AdbShellProtocolSpawner = class {
     #spawn;
     constructor(spawn) {
@@ -3635,7 +3635,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/shell/service.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/shell/service.js
   var AdbShellProtocolSubprocessService = class extends AdbShellProtocolSpawner {
     #adb;
     get adb() {
@@ -3672,7 +3672,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/subprocess/service.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/subprocess/service.js
   var AdbSubprocessService = class {
     #adb;
     get adb() {
@@ -3695,7 +3695,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/response.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/response.js
   function encodeAsciiUnchecked(value) {
     const result = new Uint8Array(value.length);
     for (let i = 0; i < value.length; i += 1) {
@@ -3764,7 +3764,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/request.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/request.js
   var AdbSyncRequestId = {
     List: adbSyncEncodeId("LIST"),
     ListV2: adbSyncEncodeId("LIS2"),
@@ -3793,7 +3793,7 @@
     await writable.write(value);
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/stat.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/stat.js
   var LinuxFileType = {
     Directory: 4,
     File: 8,
@@ -3908,7 +3908,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/list.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/list.js
   var AdbSyncEntryResponse = extend(AdbSyncLstatResponse, {
     name: string(u32)
   });
@@ -3961,7 +3961,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/pull.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/pull.js
   var AdbSyncDataResponse = struct({ data: buffer(u32) }, { littleEndian: true });
   async function* adbSyncPullGenerator(socket, path) {
     const locked = await socket.lock();
@@ -3988,7 +3988,7 @@
     return ReadableStream2.from(adbSyncPullGenerator(socket, path));
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/push.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/push.js
   var ADB_SYNC_MAX_PACKET_SIZE = 64 * 1024;
   var AdbSyncOkResponse = struct({ unused: u32 }, { littleEndian: true });
   async function pipeFileData(locked, file, packetSize, mtime) {
@@ -4060,7 +4060,7 @@
     return adbSyncPushV1(options);
   }
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/socket.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/socket.js
   var AdbSyncSocketLocked = class {
     #writer;
     #readable;
@@ -4130,7 +4130,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/sync/sync.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/sync/sync.js
   function dirname(path) {
     const end = path.lastIndexOf("/");
     if (end === -1) {
@@ -4251,7 +4251,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/commands/tcpip.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/commands/tcpip.js
   function parsePort(value) {
     if (!value || value === "0") {
       return void 0;
@@ -4289,7 +4289,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/adb.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/adb.js
   var Adb = class {
     #transport;
     get transport() {
@@ -4370,7 +4370,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/banner.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/banner.js
   var AdbBannerKey = {
     Product: "ro.product.name",
     Model: "ro.product.model",
@@ -4445,7 +4445,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/daemon/crypto.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/crypto.js
   function getBigUint(array, byteOffset, length) {
     let result = 0n;
     for (let j = 0; j < length % 8; j += 1) {
@@ -4633,7 +4633,7 @@
     return padded;
   }
 
-  // node_modules/@yume-chan/adb/esm/daemon/packet.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/packet.js
   var AdbCommand = {
     Auth: 1213486401,
     // 'AUTH'
@@ -4681,7 +4681,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/daemon/auth.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/auth.js
   var AdbAuthType = {
     Token: 1,
     Signature: 2,
@@ -4773,7 +4773,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/daemon/socket.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/socket.js
   var AdbDaemonSocketController = class {
     #dispatcher;
     localId;
@@ -4903,7 +4903,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/daemon/dispatcher.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/dispatcher.js
   var AdbPacketDispatcher = class {
     // ADB socket id starts from 1
     // (0 means open failed)
@@ -5132,7 +5132,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/daemon/transport.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/daemon/transport.js
   var ADB_DAEMON_VERSION_OMIT_CHECKSUM = 16777217;
   var ADB_DAEMON_DEFAULT_FEATURES = /* @__PURE__ */ (() => [
     AdbFeature.ShellV2,
@@ -5313,7 +5313,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb/esm/server/observer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb/esm/server/observer.js
   function unorderedRemove(array, index) {
     if (index < 0 || index >= array.length) {
       return;
@@ -5322,7 +5322,7 @@
     array.length -= 1;
   }
 
-  // node_modules/@yume-chan/adb-daemon-webusb/esm/error.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/error.js
   var DeviceBusyError = class extends Error {
     constructor(cause) {
       super("The device is already in used by another program", {
@@ -5331,7 +5331,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-daemon-webusb/esm/utils.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/utils.js
   function isErrorName(e, name) {
     return typeof e === "object" && e !== null && "name" in e && e.name === name;
   }
@@ -5422,7 +5422,7 @@
     return false;
   }
 
-  // node_modules/@yume-chan/adb-daemon-webusb/esm/device.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/device.js
   var AdbDefaultInterfaceFilter = {
     classCode: 255,
     subclassCode: 66,
@@ -5607,7 +5607,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-daemon-webusb/esm/observer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/observer.js
   var AdbDaemonWebUsbDeviceObserver = class _AdbDaemonWebUsbDeviceObserver {
     static async create(usb, options = {}) {
       const devices = await usb.getDevices();
@@ -5673,7 +5673,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-daemon-webusb/esm/manager.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-daemon-webusb/esm/manager.js
   var AdbDaemonWebUsbDeviceManager = class _AdbDaemonWebUsbDeviceManager {
     /**
      * Gets the instance of {@link AdbDaemonWebUsbDeviceManager} using browser WebUSB implementation.
@@ -5732,7 +5732,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-credential-web/esm/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-credential-web/esm/index.js
   function openDatabase() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open("Tango", 1);
@@ -5831,7 +5831,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/base/audio.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/audio.js
   var ScrcpyAudioCodec = class _ScrcpyAudioCodec {
     static Opus = /* @__PURE__ */ new _ScrcpyAudioCodec("opus", 1869641075, "audio/opus", "opus");
     static Aac = /* @__PURE__ */ new _ScrcpyAudioCodec("aac", 6381923, "audio/aac", "mp4a.66");
@@ -5852,7 +5852,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/base/control-message-type.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/control-message-type.js
   var ScrcpyControlMessageType = {
     InjectKeyCode: 0,
     InjectText: 1,
@@ -5874,7 +5874,7 @@
     ResetVideo: 17
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/base/device-message.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/device-message.js
   var ScrcpyDeviceMessageParsers = class {
     #parsers = [];
     get parsers() {
@@ -5915,7 +5915,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/base/option-value.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/option-value.js
   function isScrcpyOptionValue(value) {
     return typeof value === "object" && value !== null && "toOptionValue" in value && typeof value.toOptionValue === "function";
   }
@@ -5932,14 +5932,14 @@
     return value.toString();
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/base/video.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/base/video.js
   var ScrcpyVideoCodecId = {
     H264: 1748121140,
     H265: 1748121141,
     AV1: 6387249
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/index.js
   var impl_exports = {};
   __export(impl_exports, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage,
@@ -5973,7 +5973,7 @@
     setListDisplays: () => setListDisplays
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/android/key-event.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/key-event.js
   var AndroidKeyEventAction = {
     Down: 0,
     Up: 1
@@ -6156,7 +6156,7 @@
     AndroidPaste: 279
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/android/motion-event.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/motion-event.js
   var AndroidMotionEventAction = {
     Down: 0,
     Up: 1,
@@ -6183,16 +6183,16 @@
     StylusSecondary: 64
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/android/screen-power-mode.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/android/screen-power-mode.js
   var AndroidScreenPowerMode = {
     Off: 0,
     Normal: 2
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/control/empty.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/empty.js
   var EmptyControlMessage = struct({ type: u8 }, { littleEndian: false });
 
-  // node_modules/@yume-chan/scrcpy/esm/control/inject-key-code.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/inject-key-code.js
   var ScrcpyInjectKeyCodeControlMessage = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.InjectKeyCode),
     action: u8(),
@@ -6201,10 +6201,10 @@
     metaState: u32()
   }, { littleEndian: false }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/control/inject-text.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/inject-text.js
   var ScrcpyInjectTextControlMessage = struct({ type: u8, text: string(u32) }, { littleEndian: false });
 
-  // node_modules/@yume-chan/scrcpy/esm/control/message-type-map.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/message-type-map.js
   var ScrcpyControlMessageTypeMap = class {
     #types;
     constructor(options) {
@@ -6223,16 +6223,16 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/control/set-screen-power-mode.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/set-screen-power-mode.js
   var ScrcpySetDisplayPowerControlMessage = struct({ type: u8, mode: u8() }, { littleEndian: false });
 
-  // node_modules/@yume-chan/scrcpy/esm/control/start-app.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/start-app.js
   var ScrcpyStartAppControlMessage = struct({
     type: u8,
     name: string(u8)
   }, { littleEndian: false });
 
-  // node_modules/@yume-chan/scrcpy/esm/control/uhid.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/uhid.js
   var ScrcpyUHidInputControlMessage = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.UHidInput),
     id: u16,
@@ -6240,7 +6240,7 @@
   }, { littleEndian: false }))();
   var ScrcpyUHidDestroyControlMessage = struct({ type: u8, id: u16 }, { littleEndian: false });
 
-  // node_modules/@yume-chan/scrcpy/esm/control/serializer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/serializer.js
   var ScrcpyControlMessageSerializer = class {
     #options;
     #typeMap;
@@ -6343,7 +6343,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/control/writer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/control/writer.js
   var ScrcpyControlMessageWriter = class {
     #writer;
     #serializer;
@@ -6428,7 +6428,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/back-or-screen-on.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/back-or-screen-on.js
   var BackOrScreenOnControlMessage = EmptyControlMessage;
   function serializeBackOrScreenOnControlMessage(message) {
     if (message.action === AndroidKeyEventAction.Down) {
@@ -6437,7 +6437,7 @@
     return void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/clipboard-stream.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/clipboard-stream.js
   var ClipboardDeviceMessage = struct({ content: string(u32) }, { littleEndian: false });
   var ClipboardStream = class extends PushReadableStream {
     #controller;
@@ -6461,7 +6461,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/control-message-types.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/control-message-types.js
   var ControlMessageTypes = /* @__PURE__ */ (() => [
     /*  0 */
     ScrcpyControlMessageType.InjectKeyCode,
@@ -6487,7 +6487,7 @@
     ScrcpyControlMessageType.RotateDevice
   ])();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/init.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/init.js
   var VideoOrientation = {
     Unlocked: -1,
     Portrait: 0,
@@ -6548,7 +6548,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/defaults.js
   var Defaults = {
     logLevel: "debug",
     maxSize: 0,
@@ -6565,7 +6565,7 @@
     codecOptions: void 0
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/utils/clamp.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/clamp.js
   function clamp(value, min, max) {
     if (value < min) {
       return min;
@@ -6576,16 +6576,16 @@
     return value;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/utils/constants.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/constants.js
   var DefaultServerPath = "/data/local/tmp/scrcpy-server.jar";
 
-  // node_modules/@yume-chan/scrcpy/esm/utils/omit.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/utils/omit.js
   // @__NO_SIDE_EFFECTS__
   function omit(value, ...keys) {
     return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/inject-touch.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/inject-touch.js
   var UnsignedFloat = field(2, "byob", (source, { buffer: buffer2, index, littleEndian }) => {
     source = clamp(source, -1, 1);
     source = source === 1 ? 65535 : source * 65536;
@@ -6616,7 +6616,7 @@
     return InjectTouchControlMessage.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/media-stream-transformer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/media-stream-transformer.js
   var MediaStreamRawPacket = struct({ pts: u64, data: buffer(u32) }, { littleEndian: false });
   var PtsConfig = 1n << 63n;
   function createMediaStreamTransformer(options) {
@@ -6652,7 +6652,7 @@
     };
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-display.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-display.js
   function parseDisplay(line) {
     const match = line.match(/^\s+scrcpy --display (\d+)$/);
     if (match) {
@@ -6663,7 +6663,7 @@
     return void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-video-stream-metadata.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/parse-video-stream-metadata.js
   async function readString(stream, maxLength) {
     const buffer2 = await stream.readExactly(maxLength);
     return decodeUtf8(buffer2.subarray(0, buffer2.indexOf(0)));
@@ -6687,7 +6687,7 @@
     return { stream: buffered.release(), metadata };
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/scroll-controller.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/scroll-controller.js
   var InjectScrollControlMessage = struct({
     type: u8,
     pointerX: u32,
@@ -6738,7 +6738,7 @@
     return new ScrollController();
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize-order.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize-order.js
   var SerializeOrder = [
     "logLevel",
     "maxSize",
@@ -6755,23 +6755,23 @@
     "codecOptions"
   ];
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/serialize.js
   function serialize(options, order) {
     return order.map((key) => toScrcpyOptionValue(options[key], "-"));
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-clipboard.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-clipboard.js
   var SetClipboardControlMessage = struct({ type: u8, content: string(u32) }, { littleEndian: false });
   function serializeSetClipboardControlMessage(message) {
     return SetClipboardControlMessage.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-list-display.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_15/impl/set-list-display.js
   function setListDisplays(options) {
     options.displayId = -1;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/index.js
   var impl_exports2 = {};
   __export(impl_exports2, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage,
@@ -6808,13 +6808,13 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/defaults.js
   var Defaults2 = /* @__PURE__ */ (() => ({
     ...impl_exports.Defaults,
     encoderName: void 0
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/parse-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/parse-encoder.js
   function parseEncoder(line, encoderNameRegex) {
     const match = line.match(encoderNameRegex);
     if (match) {
@@ -6824,18 +6824,18 @@
   }
   var EncoderRegex = /^\s+scrcpy --encoder-name '([^']+)'$/;
 
-  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/serialize-order.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/serialize-order.js
   var SerializeOrder2 = /* @__PURE__ */ (() => [
     ...impl_exports.SerializeOrder,
     "encoderName"
   ])();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_17/impl/set-list-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_17/impl/set-list-encoder.js
   function setListEncoders(options) {
     options.encoderName = "_";
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/index.js
   var impl_exports3 = {};
   __export(impl_exports3, {
     BackOrScreenOnControlMessage: () => BackOrScreenOnControlMessage2,
@@ -6872,20 +6872,20 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/back-or-screen-on.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/back-or-screen-on.js
   var BackOrScreenOnControlMessage2 = extend(impl_exports2.BackOrScreenOnControlMessage, { action: u8() });
   function serializeBackOrScreenOnControlMessage2(message) {
     return BackOrScreenOnControlMessage2.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/control-message-types.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/control-message-types.js
   var ControlMessageTypes2 = /* @__PURE__ */ (() => {
     const result = impl_exports2.ControlMessageTypes.slice();
     result.splice(6, 0, ScrcpyControlMessageType.ExpandSettingPanel);
     return result;
   })();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/init.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/init.js
   var VideoOrientation2 = {
     Initial: -2,
     Unlocked: -1,
@@ -6895,7 +6895,7 @@
     LandscapeFlipped: 3
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/defaults.js
   var Defaults3 = /* @__PURE__ */ (() => ({
     ...impl_exports2.Defaults,
     logLevel: "debug",
@@ -6903,16 +6903,16 @@
     powerOffOnClose: false
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/parse-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/parse-encoder.js
   var EncoderRegex2 = /^\s+scrcpy --encoder '([^']+)'$/;
 
-  // node_modules/@yume-chan/scrcpy/esm/1_18/impl/serialize-order.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_18/impl/serialize-order.js
   var SerializeOrder3 = /* @__PURE__ */ (() => [
     ...impl_exports2.SerializeOrder,
     "powerOffOnClose"
   ])();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/index.js
   var impl_exports4 = {};
   __export(impl_exports4, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -6951,16 +6951,16 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/defaults.js
   var Defaults4 = /* @__PURE__ */ (() => ({
     ...impl_exports3.Defaults,
     clipboardAutosync: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/parse-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/parse-encoder.js
   var EncoderRegex3 = /^\s+scrcpy --encoder-name '([^']+)'$/;
 
-  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/serialize.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/serialize.js
   function toSnakeCase(input) {
     return input.replace(/([A-Z])/g, "_$1").toLowerCase();
   }
@@ -6980,7 +6980,7 @@
     return result;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_21/impl/set-clipboard.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_21/impl/set-clipboard.js
   var AckClipboardDeviceMessage = struct({ sequence: u64 }, { littleEndian: false });
   var SetClipboardControlMessage2 = struct({
     type: u8,
@@ -7030,7 +7030,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/index.js
   var impl_exports5 = {};
   __export(impl_exports5, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7069,7 +7069,7 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/defaults.js
   var Defaults5 = /* @__PURE__ */ (() => ({
     ...impl_exports4.Defaults,
     downsizeOnError: true,
@@ -7077,7 +7077,7 @@
     sendDummyByte: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/parse-video-stream-metadata.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/parse-video-stream-metadata.js
   async function parseVideoStreamMetadata2(options, stream) {
     if (!options.sendDeviceMeta) {
       return { stream, metadata: { codec: ScrcpyVideoCodecId.H264 } };
@@ -7086,7 +7086,7 @@
     }
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_22/impl/scroll-controller.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_22/impl/scroll-controller.js
   var InjectScrollControlMessage2 = extend(impl_exports4.InjectScrollControlMessage, { buttons: s32 });
   var ScrollController2 = class extends impl_exports4.ScrollController {
     serializeScrollMessage(message) {
@@ -7101,7 +7101,7 @@
     return new ScrollController2();
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/index.js
   var impl_exports6 = {};
   __export(impl_exports6, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7141,13 +7141,13 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/defaults.js
   var Defaults6 = /* @__PURE__ */ (() => ({
     ...impl_exports5.Defaults,
     cleanup: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_23/impl/media-stream-transformer.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_23/impl/media-stream-transformer.js
   var PtsKeyframe = 1n << 62n;
   function createMediaStreamTransformer2(options) {
     if (!options.sendFrameMeta) {
@@ -7192,13 +7192,13 @@
     };
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/1_24/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_24/impl/defaults.js
   var Defaults7 = /* @__PURE__ */ (() => ({
     ...impl_exports6.Defaults,
     powerOn: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/1_25/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_25/impl/index.js
   var impl_exports7 = {};
   __export(impl_exports7, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7239,7 +7239,7 @@
     setListEncoders: () => setListEncoders
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/1_25/impl/scroll-controller.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/1_25/impl/scroll-controller.js
   var SignedFloat = field(2, "byob", (value, { buffer: buffer2, index, littleEndian }) => {
     value = clamp(value, -1, 1);
     value = value === 1 ? 32767 : value * 32768;
@@ -7268,7 +7268,7 @@
     return new ScrollController3();
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/index.js
   var impl_exports8 = {};
   __export(impl_exports8, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7311,7 +7311,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/defaults.js
   var Defaults8 = /* @__PURE__ */ (() => ({
     ...omit(impl_exports7.Defaults, "bitRate", "codecOptions", "encoderName"),
     scid: void 0,
@@ -7329,7 +7329,7 @@
     sendCodecMeta: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/init.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/init.js
   var InstanceId = class _InstanceId {
     static NONE = /* @__PURE__ */ new _InstanceId(-1);
     static random() {
@@ -7347,7 +7347,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/inject-touch.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/inject-touch.js
   var InjectTouchControlMessage2 = /* @__PURE__ */ (() => struct({
     type: u8(ScrcpyControlMessageType.InjectTouch),
     action: u8(),
@@ -7364,7 +7364,7 @@
     return InjectTouchControlMessage2.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-audio-stream-metadata.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-audio-stream-metadata.js
   async function parseAudioStreamMetadata(stream, options) {
     const buffered = new BufferedReadableStream(stream);
     const buffer2 = await buffered.readExactly(4);
@@ -7438,7 +7438,7 @@
     };
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-display.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-display.js
   function parseDisplay2(line) {
     const match = line.match(/^\s+--display=(\d+)\s+\(([^)]+)\)$/);
     if (match) {
@@ -7453,7 +7453,7 @@
     return void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-encoder.js
   var EncoderRegex4 = /^\s+--(video|audio)-codec=(\S+)\s+--\1-encoder='([^']+)'$/;
   function parseEncoder2(line) {
     const match = line.match(EncoderRegex4);
@@ -7464,7 +7464,7 @@
     } : void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-video-stream-metadata.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/parse-video-stream-metadata.js
   function toCodecId(codec) {
     switch (codec) {
       case "h264":
@@ -7508,17 +7508,17 @@
     return parseAsync(options, stream);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-display.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-display.js
   function setListDisplays2(options) {
     options.listDisplays = true;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_0/impl/set-list-encoder.js
   function setListEncoders2(options) {
     options.listEncoders = true;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_1/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_1/impl/index.js
   var impl_exports9 = {};
   __export(impl_exports9, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7561,14 +7561,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_1/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_1/impl/defaults.js
   var Defaults9 = /* @__PURE__ */ (() => ({
     ...impl_exports8.Defaults,
     video: true,
     audioSource: "output"
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_2/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_2/impl/defaults.js
   var Defaults10 = /* @__PURE__ */ (() => ({
     ...impl_exports9.Defaults,
     videoSource: "display",
@@ -7583,7 +7583,7 @@
     listCameraSizes: false
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_2/impl/parse-display.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_2/impl/parse-display.js
   function parseDisplay3(line) {
     const match = line.match(/^\s+--display-id=(\d+)\s+\(([^)]+)\)$/);
     if (match) {
@@ -7598,7 +7598,7 @@
     return void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_3/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_3/impl/index.js
   var impl_exports10 = {};
   __export(impl_exports10, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7641,7 +7641,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/index.js
   var impl_exports11 = {};
   __export(impl_exports11, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7688,7 +7688,7 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/control-message-types.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/control-message-types.js
   var ControlMessageTypes3 = /* @__PURE__ */ (() => [
     ...impl_exports10.ControlMessageTypes,
     ScrcpyControlMessageType.UHidCreate,
@@ -7696,7 +7696,7 @@
     ScrcpyControlMessageType.OpenHardKeyboardSettings
   ])();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/serialize-uhid-create.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/serialize-uhid-create.js
   var UHidCreateControlMessage = struct({
     type: u8,
     id: u16,
@@ -7706,7 +7706,7 @@
     return UHidCreateControlMessage.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/2_4/impl/uhid-output-stream.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_4/impl/uhid-output-stream.js
   var UHidOutputDeviceMessage = struct({
     id: u16,
     data: buffer(u16)
@@ -7733,7 +7733,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/2_6/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_6/impl/index.js
   var impl_exports12 = {};
   __export(impl_exports12, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7780,13 +7780,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_6/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_6/impl/defaults.js
   var Defaults11 = /* @__PURE__ */ (() => ({
     ...impl_exports11.Defaults,
     audioDup: false
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/index.js
   var impl_exports13 = {};
   __export(impl_exports13, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7833,14 +7833,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/control-message-types.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/control-message-types.js
   var ControlMessageTypes4 = /* @__PURE__ */ (() => {
     const result = impl_exports12.ControlMessageTypes.slice();
     result.splice(14, 0, ScrcpyControlMessageType.UHidDestroy);
     return result;
   })();
 
-  // node_modules/@yume-chan/scrcpy/esm/2_7/impl/serialize-uhid-create.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/2_7/impl/serialize-uhid-create.js
   var UHidCreateControlMessage2 = struct({
     type: u8,
     id: u16,
@@ -7851,7 +7851,7 @@
     return UHidCreateControlMessage2.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/index.js
   var impl_exports14 = {};
   __export(impl_exports14, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -7902,14 +7902,14 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/control-message-types.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/control-message-types.js
   var ControlMessageTypes5 = /* @__PURE__ */ (() => [
     ...impl_exports13.ControlMessageTypes,
     ScrcpyControlMessageType.StartApp,
     ScrcpyControlMessageType.ResetVideo
   ])();
 
-  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/defaults.js
   var Defaults12 = /* @__PURE__ */ (() => ({
     ...omit(impl_exports13.Defaults, "lockVideoOrientation"),
     captureOrientation: void 0,
@@ -7920,7 +7920,7 @@
     vdSystemDecorations: true
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/init.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/init.js
   var LockOrientation = {
     Unlocked: 0,
     LockedInitial: 1,
@@ -7983,7 +7983,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/3_0/impl/parse-encoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_0/impl/parse-encoder.js
   var EncoderRegex5 = /^\s+--(video|audio)-codec=(\S+)\s+--\1-encoder=(\S+)(?:\s*\((sw|hw|hybrid)\))?(?:\s*\[vendor\])?(?:\s*\(alias for (\S+)\))?$/;
   function toHardwareType(value) {
     switch (value) {
@@ -8009,7 +8009,7 @@
     } : void 0;
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/index.js
   var impl_exports15 = {};
   __export(impl_exports15, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -8060,13 +8060,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/defaults.js
   var Defaults13 = /* @__PURE__ */ (() => ({
     ...impl_exports14.Defaults,
     vdDestroyContent: false
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/3_1/impl/serialize-uhid-create.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_1/impl/serialize-uhid-create.js
   var UHidCreateControlMessage3 = struct({
     type: u8,
     id: u16,
@@ -8079,7 +8079,7 @@
     return UHidCreateControlMessage3.serialize(message);
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/3_2/impl/index.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_2/impl/index.js
   var impl_exports16 = {};
   __export(impl_exports16, {
     AckClipboardDeviceMessage: () => AckClipboardDeviceMessage,
@@ -8130,13 +8130,13 @@
     setListEncoders: () => setListEncoders2
   });
 
-  // node_modules/@yume-chan/scrcpy/esm/3_2/impl/defaults.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_2/impl/defaults.js
   var Defaults14 = /* @__PURE__ */ (() => ({
     ...impl_exports15.Defaults,
     displayImePolicy: void 0
   }))();
 
-  // node_modules/@yume-chan/scrcpy/esm/3_3_1/impl/scroll-controller.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_3_1/impl/scroll-controller.js
   var ScrollController4 = class {
     serializeScrollMessage(message) {
       message = {
@@ -8151,7 +8151,7 @@
     return new ScrollController4();
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/3_3_1/options.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/3_3_1/options.js
   var ScrcpyOptions3_3_1 = class {
     static Defaults = Defaults14;
     value;
@@ -8228,7 +8228,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/codec/av1.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/av1.js
   var AndroidAv1Profile = {
     Main8: 1 << 0,
     Main10: 1 << 1,
@@ -8819,7 +8819,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/codec/nalu.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/nalu.js
   function* annexBSplitNalu(buffer2) {
     let start = -1;
     let zeroCount = 0;
@@ -9030,7 +9030,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy/esm/codec/h264.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/h264.js
   var AndroidAvcProfile = {
     Baseline: 1 << 0,
     Main: 1 << 1,
@@ -9231,7 +9231,7 @@
     };
   }
 
-  // node_modules/@yume-chan/scrcpy/esm/codec/h265.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy/esm/codec/h265.js
   var AndroidHevcProfile = {
     Main: 1 << 0,
     Main10: 1 << 1,
@@ -10227,7 +10227,7 @@
     };
   }
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/connection.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/connection.js
   var SCRCPY_SOCKET_NAME_PREFIX = "scrcpy";
   var AdbScrcpyConnection = class {
     adb;
@@ -10340,7 +10340,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/video.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/video.js
   var AdbScrcpyVideoStream = class {
     #options;
     #metadata;
@@ -10410,7 +10410,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/client.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/client.js
   function arrayToStream(array) {
     return new PushReadableStream(async (controller) => {
       for (const item of array) {
@@ -10648,7 +10648,7 @@
     }
   };
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/1_15/impl/get-displays.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/1_15/impl/get-displays.js
   async function getDisplays(adb, path, options) {
     try {
       const client = await AdbScrcpyClient.start(adb, path, options);
@@ -10672,7 +10672,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/2_0/impl/get-encoders.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/2_0/impl/get-encoders.js
   async function getEncoders(adb, path, options) {
     try {
       const client = await AdbScrcpyClient.start(adb, path, options);
@@ -10696,7 +10696,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/2_1/impl/create-connection.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/2_1/impl/create-connection.js
   function createConnection(adb, options) {
     const connectionOptions = {
       scid: toScrcpyOptionValue(options.scid, void 0),
@@ -10712,7 +10712,7 @@
     }
   }
 
-  // node_modules/@yume-chan/adb-scrcpy/esm/3_3_3.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/adb-scrcpy/esm/3_3_3.js
   var AdbScrcpyOptions3_3_3 = class extends ScrcpyOptions3_3_1 {
     version;
     spawner;
@@ -10732,7 +10732,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/utils.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/utils.js
   function hexDigits(value) {
     return value.toString(16).toUpperCase();
   }
@@ -10743,7 +10743,7 @@
     return value.toString(10).padStart(2, "0");
   }
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/av1.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/av1.js
   var Av1Codec = class {
     #decoder;
     #updateSize;
@@ -10828,7 +10828,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h26x.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h26x.js
   var H26xDecoder = class {
     #decoder;
     #config;
@@ -10888,7 +10888,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h264.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h264.js
   var H264Decoder = class extends H26xDecoder {
     #updateSize;
     #options;
@@ -10909,7 +10909,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h265.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/codec/h265.js
   var H265Decoder = class extends H26xDecoder {
     #updateSize;
     #options;
@@ -10939,7 +10939,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/pool.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/pool.js
   var Pool = class {
     #controller;
     #readable = new ReadableStream({
@@ -10970,7 +10970,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/snapshot.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/snapshot.js
   var VideoFrameCapturer = class {
     #canvas;
     #context;
@@ -11009,7 +11009,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/decoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/decoder.js
   var VideoFrameCapturerPool = /* @__PURE__ */ new Pool(() => new VideoFrameCapturer(), 4);
   var WebCodecsVideoDecoder = class {
     static get isSupported() {
@@ -11175,11 +11175,11 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
   var import_yuv_buffer = __toESM(require_yuv_buffer(), 1);
   var import_yuv_canvas = __toESM(require_yuv_canvas(), 1);
 
-  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/wrapper.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/wrapper.js
   var import_meta = {};
   var worker;
   var workerReady = false;
@@ -11256,7 +11256,7 @@
     return Promise.resolve(decoder);
   }
 
-  // node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-tinyh264/esm/decoder.js
   var noop2 = () => {
   };
   function createCanvas() {
@@ -11383,7 +11383,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/canvas.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/canvas.js
   var CanvasVideoFrameRenderer = class {
     #canvas;
     get canvas() {
@@ -11404,7 +11404,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/bitmap.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/bitmap.js
   var BitmapVideoFrameRenderer = class extends CanvasVideoFrameRenderer {
     #context;
     constructor(canvas) {
@@ -11419,7 +11419,7 @@
     }
   };
 
-  // node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/webgl.js
+  // ../scrcpy便捷网页版v4.0.10/node_modules/@yume-chan/scrcpy-decoder-webcodecs/esm/video/render/webgl.js
   var Resolved = Promise.resolve();
   function createContext(canvas, enableCapture) {
     const attributes = {
@@ -12651,13 +12651,32 @@
     const connection = createAdbConnection(ws);
     onStatus("ADB \u63E1\u624B\u4E2D\u2026");
     let transport;
+    const authTask = AdbDaemonTransport.authenticate({
+      serial: t,
+      connection,
+      credentialStore: new AdbWebCredentialStore("PandaTestLocal"),
+      readTimeLimit: 0
+    });
+    authTask.catch(() => {
+    });
+    const authTimeout = Math.max(
+      8e3,
+      Number(new URLSearchParams(location.search).get("auth_timeout")) || 3e4
+    );
     try {
-      transport = await AdbDaemonTransport.authenticate({
-        serial: t,
-        connection,
-        credentialStore: new AdbWebCredentialStore("PandaTestLocal"),
-        readTimeLimit: 0
-      });
+      transport = await Promise.race([
+        authTask,
+        new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(
+              new WirelessError(
+                "ADB \u63E1\u624B\u8D85\u65F6\uFF08" + Math.round(authTimeout / 1e3) + "s\uFF09\u3002\u82E5\u624B\u673A\u5F39\u51FA\u300C\u5141\u8BB8 USB \u8C03\u8BD5\u300D\u8BF7\u70B9\u5141\u8BB8\uFF1B\u5426\u5219\u91CD\u65B0\u5F00\u542F\u65E0\u7EBF\u8C03\u8BD5\u540E\u518D\u8FDE",
+                "AUTH_TIMEOUT"
+              )
+            );
+          }, authTimeout);
+        })
+      ]);
     } catch (err) {
       try {
         ws.close();
@@ -12757,11 +12776,18 @@
     }
     return false;
   }
-  var AUDIO_GUARD_PATH = "/data/local/tmp/panda_guard.sh";
-  var AUDIO_GUARD_LOG = "/data/local/tmp/panda_guard.log";
-  var AUDIO_GUARD_HB = "/data/local/tmp/panda_hb";
-  var AUDIO_GUARD_RUN = "/data/local/tmp/panda_run";
-  var KILL_SCRCPY = 'pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; true';
+  var GUARD_PATH = "/data/local/tmp/panda_guard.sh";
+  var GUARD_LOG = "/data/local/tmp/panda_guard.log";
+  var GUARD_HB = "/data/local/tmp/panda_hb";
+  var GUARD_RUN = "/data/local/tmp/panda_run";
+  var GUARD_STALE = 30;
+  var GUARD_IDLE_EXIT = 60;
+  var AUDIO_ROUTE_CMD = `v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); case "$v" in ""|*[!0-9]*) v="";; esac; if [ -n "$v" ]; then media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; media volume --stream 3 --set $v >/dev/null 2>&1; fi; true`;
+  function newGuardSession() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+  var guardHbPath = (session) => GUARD_HB + "." + session;
+  var guardRunPath = (session) => GUARD_RUN + "." + session;
   var MirrorError = class extends Error {
     constructor(message, code = "MIRROR_ERROR", cause) {
       super(message, { cause });
@@ -13062,22 +13088,22 @@
     /**
      * 结束手机端 scrcpy，并且**回读确认真的结束了**。
      * 以前只发一次 pkill、不管结果，日志却写着「已结束」，实际进程还在占音频。
+     * 现在整段清理在手机端一次跑完（TERM → 0.4s → KILL → 回读），只占一个 adb 往返。
      */
-    async killScrcpyServerOnDevice(rounds = 3) {
-      if (!this.adb) return false;
-      let pids = await this.listScrcpyPids();
-      if (!pids.length) return true;
-      for (let i = 0; i < rounds; i += 1) {
-        await this.deviceShell(KILL_SCRCPY, 6e3);
-        if (pids.length) {
-          await this.deviceShell("kill -9 " + pids.join(" ") + " 2>/dev/null; true", 5e3);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        pids = await this.listScrcpyPids();
-        if (!pids.length) return true;
+    async killScrcpyServerOnDevice() {
+      if (!this.adb) return true;
+      const out = String(
+        await this.deviceShell(
+          `pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.4; pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; sleep 0.2; echo "REMAIN=$(ps -A 2>/dev/null | grep -c '[c]om.genymobile.scrcpy')"`,
+          12e3
+        ) || ""
+      );
+      const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+      if (remain) {
+        this.onLog("\u624B\u673A\u7AEF scrcpy \u4ECD\u5728\u8FD0\u884C\uFF08" + remain + " \u4E2A\u8FDB\u7A0B\uFF09\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
+        return false;
       }
-      this.onLog("\u624B\u673A\u7AEF scrcpy \u4ECD\u5728\u8FD0\u884C\uFF08pid " + pids.join(",") + "\uFF09\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
-      return false;
+      return true;
     }
     /**
      * 触发音频路由重算。部分机型 scrcpy 退出后播放路由仍停在被捕获的状态，需要一次刷新才恢复外放。
@@ -13088,10 +13114,7 @@
      */
     async refreshAudioRoute() {
       if (!this.adb) return;
-      await this.deviceShell(
-        `v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); case "$v" in ""|*[!0-9]*) v="";; esac; if [ -n "$v" ]; then media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; media volume --stream 3 --set $v >/dev/null 2>&1; fi; true`,
-        15e3
-      );
+      await this.deviceShell(AUDIO_ROUTE_CMD, 15e3);
     }
     /**
      * 读取手机端音频状态。
@@ -13100,7 +13123,7 @@
      */
     async diagnoseAudio() {
       if (!this.adb) return "";
-      const cmd = 'echo "[scrcpy \u8FDB\u7A0B]"; ps -A 2>/dev/null | grep "[c]om.genymobile.scrcpy" || echo "\u65E0"; echo "[\u770B\u95E8\u72D7\u8FDB\u7A0B]"; ps -A 2>/dev/null | grep "[p]anda_guard.sh" || echo "\u65E0"; echo "[\u5A92\u4F53\u97F3\u91CF/\u9759\u97F3/\u8DEF\u7531]"; dumpsys audio 2>/dev/null | grep -iE "streamVolume|STREAM_MUSIC|muted|device=" | head -20; echo "[\u52FF\u6270 zen_mode]"; settings get global zen_mode 2>/dev/null; echo "[\u770B\u95E8\u72D7\u65E5\u5FD7]"; tail -n 8 ' + AUDIO_GUARD_LOG + ' 2>/dev/null || echo "\u65E0"';
+      const cmd = 'echo "[scrcpy \u8FDB\u7A0B]"; ps -A 2>/dev/null | grep "[c]om.genymobile.scrcpy" || echo "\u65E0"; echo "[\u770B\u95E8\u72D7\u8FDB\u7A0B]"; ps -A 2>/dev/null | grep "[p]anda_guard.sh" || echo "\u65E0"; echo "[\u5A92\u4F53\u97F3\u91CF/\u9759\u97F3/\u8DEF\u7531]"; dumpsys audio 2>/dev/null | grep -iE "streamVolume|STREAM_MUSIC|muted|device=" | head -20; echo "[\u52FF\u6270 zen_mode]"; settings get global zen_mode 2>/dev/null; echo "[\u770B\u95E8\u72D7\u65E5\u5FD7]"; tail -n 8 ' + GUARD_LOG + ' 2>/dev/null || echo "\u65E0"';
       return String(await this.deviceShell(cmd, 15e3) || "").trim();
     }
     /** 没连着手机时先重连一次，保留连接用于下发恢复命令 */
@@ -13136,199 +13159,129 @@
       );
       await this.refreshAudioRoute();
     }
-    /** 无线连接的端口（十六进制，/proc/net/tcp 里的写法） */
-    _guardPortHex() {
-      const m = String(this._wirelessTarget || "").match(/:(\d{2,5})$/);
-      if (!m) return "";
-      const port = parseInt(m[1], 10);
-      if (!Number.isFinite(port) || port <= 0 || port > 65535) return "";
-      return port.toString(16).toUpperCase().padStart(4, "0");
+    /**
+     * 会话开始前的一次性清理：把上一轮的看门狗、scrcpy 残留一起清掉，顺手读回 SDK 等级。
+     * 以前这是 3~4 个 adb 往返 + 两次 sleep；现在整段在手机端跑完，只占一个往返。
+     */
+    async prepareDevice() {
+      if (!this.adb) return { sdk: 0, remain: 0 };
+      const out = String(
+        await this.deviceShell(
+          `pkill -TERM -f "[p]anda_guard.sh" 2>/dev/null; pkill -9 -f "[p]anda_guard.sh" 2>/dev/null; pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.35; pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; echo "SDK=$(getprop ro.build.version.sdk)"; echo "REMAIN=$(ps -A 2>/dev/null | grep -c '[c]om.genymobile.scrcpy')"`,
+          1e4
+        ) || ""
+      );
+      const sdk = Number((/SDK=(\d+)/.exec(out) || [])[1] || 0);
+      const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+      if (sdk > 0) this._sdk = sdk;
+      if (remain) this.onLog("\u624B\u673A\u7AEF\u4ECD\u6709 " + remain + " \u4E2A scrcpy \u8FDB\u7A0B\u672A\u9000\u51FA\uFF0C\u7EE7\u7EED\u542F\u52A8\u53EF\u80FD\u62A2\u5360\u97F3\u9891");
+      return { sdk, remain };
     }
     /**
-     * 手机端看门狗：无线投屏期间由手机自己盯着与电脑的链路，
-     * 一旦断开就把 scrcpy 结束掉，把音频还给扬声器。
+     * 手机端看门狗（v4.0.12 起重新收敛为单一职责）：
      *
+     *   无线会话失联  →  结束手机端 scrcpy、释放音频采集  →  自己退出
+     *
+     * 它不重连、不改用户的勿扰/音量设置、不猜网络状态。
      * 为什么必须由手机自己动手：手机主动关 Wi-Fi 时电脑根本连不上手机，
-     * 任何远程清理都会失败。而断网后手机的 adbd / scrcpy socket 仍会保持
-     * ESTABLISHED（内核要重传十几分钟才放弃），scrcpy 写视频流时被内核阻塞，
-     * 进程**不会自己退出**，音频采集一直被占着 —— 这就是断网后手机长期没声音的根因。
+     * 任何远程清理都会失败；而断网后 scrcpy 的 socket 会被内核挂住十几分钟，
+     * 进程不会自己退出、音频采集一直被占着 —— 这就是断网后手机长期没声音的根因。
      *
-     * 判据（任一命中即动手）：
-     *  a) 手机 ping 自己的 Wi-Fi 网关连续 3 次失败（每 2 秒一次 ≈ 6 秒内命中）。
-     *     主判据。Wi-Fi 一关，默认路由立刻消失，ping 立即失败，完全不用电脑配合，
-     *     也比「电脑写心跳文件」快十几倍。
-     *  b) 与电脑的连接（本地端口 5555）从 ESTABLISHED 变成消失，连续 2 次。
-     *  c) 电脑心跳文件超过 90 秒没更新。兜底判据；阈值放宽是因为后台标签页的
-     *     定时器会被浏览器节流到 1 分钟一次，阈值太小会把正常投屏误杀。
+     * 判据只有两条（见文件顶部 GUARD_STALE 注释）：心跳过期、Wi-Fi 地址消失。
+     * 布防只占一个 adb 往返（写脚本 → 语法校验 → 置一次心跳 → 起进程 → 回读运行标记），
+     * 并且与 scrcpy 启动并行执行，不再拖慢连接。
      */
     async deployAudioGuard() {
-      const portHex = this._guardPortHex();
-      if (!portHex || !this.adb) return false;
-      await this.stopAudioGuard();
-      const gw = await this.getWifiGateway();
-      const probe = String(
-        await this.deviceShell(
-          "ip route 2>/dev/null | head -n 2; ip -4 addr show wlan0 2>/dev/null | grep 'inet ' | head -n 1",
-          8e3
-        ) || ""
-      ).replace(/\s*\n\s*/g, " | ").trim();
-      if (probe) this.onLog("\u624B\u673A\u7F51\u7EDC\u63A2\u6D4B\uFF1A" + probe);
-      const body = this._guardScript(portHex, gw);
+      if (!this.adb) return false;
+      const session = this._guardSession || (this._guardSession = newGuardSession());
+      const body = this._guardScript(session);
       const bytes = new TextEncoder().encode(body);
       let bin = "";
       for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
       const b64 = btoa(bin);
-      const write = "rm -f " + AUDIO_GUARD_LOG + " " + AUDIO_GUARD_HB + " " + AUDIO_GUARD_RUN + "; echo '" + b64 + "' | base64 -d > " + AUDIO_GUARD_PATH + "; chmod 755 " + AUDIO_GUARD_PATH + " 2>/dev/null; ls -l " + AUDIO_GUARD_PATH + " 2>&1; sh -n " + AUDIO_GUARD_PATH + " 2>&1 && echo SYNTAX_OK";
-      const writeOut = String(await this.deviceShell(write, 12e3) || "").trim();
-      if (!/SYNTAX_OK/.test(writeOut)) {
-        this.onLog("\u770B\u95E8\u72D7\u811A\u672C\u5199\u5165/\u6821\u9A8C\u5931\u8D25\uFF1A" + (writeOut || "\u65E0\u8F93\u51FA\uFF08base64 \u53EF\u80FD\u4E0D\u53EF\u7528\uFF09"));
+      const cmd = "echo '" + b64 + "' | base64 -d > " + GUARD_PATH + "; chmod 755 " + GUARD_PATH + " 2>/dev/null; sh -n " + GUARD_PATH + ' 2>/dev/null || { echo GUARD_SYNTAX_FAIL; exit 0; }; echo "$(date +%s) ' + session + '" > ' + guardHbPath(session) + "; ( nohup sh " + GUARD_PATH + " " + session + " </dev/null >/dev/null 2>&1 & ); ok=0; i=0; while [ $i -lt 8 ]; do now=$(date +%s); r=$(cat " + guardRunPath(session) + ' 2>/dev/null); r=${r%% *}; case "$r" in ""|*[!0-9]*) ;; *) if [ $((now-r)) -lt 25 ]; then ok=1; break; fi ;; esac; i=$((i+1)); sleep 0.3; done; if [ $ok -eq 1 ]; then echo GUARD_ALIVE; else echo GUARD_DEAD; fi; tail -n 2 ' + GUARD_LOG + " 2>/dev/null";
+      const out = String(await this.deviceShell(cmd, 12e3) || "").trim();
+      if (/GUARD_SYNTAX_FAIL/.test(out)) {
+        this.onLog("\u770B\u95E8\u72D7\u811A\u672C\u8BED\u6CD5\u6821\u9A8C\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7\u5E03\u9632\uFF08\u4E0D\u5F71\u54CD\u672C\u8F6E\u6295\u5C4F\uFF09");
         return false;
       }
-      await this.heartbeat();
-      this.onLog("\u542F\u7528\u624B\u673A\u7AEF\u770B\u95E8\u72D7\uFF1A\u65AD\u7F51\u540E\u7531\u624B\u673A\u81EA\u5DF1\u7ED3\u675F scrcpy\u3001\u6062\u590D\u58F0\u97F3");
-      const start = "( nohup sh " + AUDIO_GUARD_PATH + " </dev/null >/dev/null 2>&1 & ); sleep 1.2; echo LAUNCHED; cat " + AUDIO_GUARD_LOG + " 2>/dev/null";
-      const startOut = String(await this.deviceShell(start, 1e4) || "").trim();
-      let alive = await this.isAudioGuardAlive();
-      if (!alive) {
-        await this.stopAudioGuard();
-        await this.deviceShell(
-          "( setsid sh " + AUDIO_GUARD_PATH + " </dev/null >/dev/null 2>&1 & ); sleep 1.2; true",
-          8e3
-        );
-        alive = await this.isAudioGuardAlive();
-      }
-      const tail = (await this.readAudioGuardLog(4)).replace(/\s*\n\s*/g, " | ");
+      const alive = /GUARD_ALIVE/.test(out);
+      const tail = out.split(/\n/).map((l) => l.trim()).filter((l) => l.startsWith("[")).join(" | ");
       if (alive) {
         this.onLog(
-          "\u770B\u95E8\u72D7\u5DF2\u5C31\u7EEA" + (gw ? "\uFF08\u5B88 Wi-Fi \u7F51\u5173 " + gw + "\uFF0C\u65AD\u7F51\u7EA6 6 \u79D2\u5185\u51FA\u624B\uFF09" : "\uFF08\u5B88 Wi-Fi \u9ED8\u8BA4\u8DEF\u7531\uFF0C\u65AD\u7F51\u7EA6 6 \u79D2\u5185\u51FA\u624B\uFF09") + (tail ? "\uFF1B\u624B\u673A\u65E5\u5FD7 " + tail : "")
+          "\u770B\u95E8\u72D7\u5DF2\u5E03\u9632\uFF1A\u5FC3\u8DF3 5s/\u6B21\uFF0C\u5931\u8054\u8D85\u8FC7 " + GUARD_STALE + "s \u81EA\u52A8\u56DE\u6536 scrcpy" + (tail ? "\uFF1B\u624B\u673A\u65E5\u5FD7 " + tail : "")
         );
       } else {
-        this.onLog(
-          "\u770B\u95E8\u72D7\u672A\u80FD\u542F\u52A8\u3002\u8BCA\u65AD\u56DE\u663E\uFF1A" + (startOut.replace(/\s*\n\s*/g, " | ") || "\u65E0\u8F93\u51FA") + (tail ? "\uFF1B\u624B\u673A\u65E5\u5FD7 " + tail : "")
-        );
+        this.onLog("\u770B\u95E8\u72D7\u672A\u80FD\u542F\u52A8\u3002\u8BCA\u65AD\u56DE\u663E\uFF1A" + (out.replace(/\s*\n\s*/g, " | ") || "\u65E0\u8F93\u51FA"));
       }
       return alive;
     }
-    /** 手机 Wi-Fi 的默认网关，看门狗用它判断 Wi-Fi 是否还连着 */
-    async getWifiGateway() {
-      if (!this.adb) return "";
-      const route = String(await this.deviceShell("ip route 2>/dev/null", 5e3) || "");
-      for (const line of route.split(/\n/)) {
-        const m = /^default\s+via\s+(\d{1,3}(?:\.\d{1,3}){3})\s+dev\s+wlan/.exec(line.trim());
-        if (m) return m[1];
-      }
-      const raw = String(await this.deviceShell("cat /proc/net/route 2>/dev/null", 5e3) || "");
-      for (const line of raw.split(/\n/).slice(1)) {
-        const f = line.trim().split(/\s+/);
-        if (f.length > 2 && f[1] === "00000000" && /^wlan/.test(f[0])) {
-          const hex = String(f[2] || "").toUpperCase();
-          if (/^[0-9A-F]{8}$/.test(hex)) {
-            const bytes = hex.match(/../g).reverse().map((h) => parseInt(h, 16));
-            if (bytes.every((b) => b >= 0 && b <= 255)) return bytes.join(".");
-          }
-          break;
-        }
-      }
-      return "";
-    }
     /** 看门狗脚本正文（单独抽出来，方便本地仿真验证） */
-    _guardScript(portHex, gw) {
+    _guardScript(session) {
       const lines = [
         "#!/system/bin/sh",
-        "PORT_HEX=" + portHex,
-        "GW='" + (gw || "") + "'",
-        "LOG=" + AUDIO_GUARD_LOG,
-        "HB=" + AUDIO_GUARD_HB,
+        "# \u5355\u4E00\u804C\u8D23\uFF1A\u65E0\u7EBF\u4F1A\u8BDD\u5931\u8054 -> \u7ED3\u675F scrcpy\u3001\u91CA\u653E\u97F3\u9891\u91C7\u96C6 -> \u9000\u51FA\u3002",
+        "# \u4E0D\u91CD\u8FDE\u3001\u4E0D\u6539\u52FF\u6270/\u97F3\u91CF\u3001\u4E0D\u731C\u7F51\u7EDC\uFF1B\u5224\u636E\u53EA\u6709\u300C\u5FC3\u8DF3\u8FC7\u671F\u300D\u4E0E\u300CWi-Fi \u5730\u5740\u6D88\u5931\u300D\u3002",
+        'SESSION="' + session + '"',
+        "HB=" + guardHbPath(session),
+        "RUN=" + guardRunPath(session),
+        "LOG=" + GUARD_LOG,
+        "STALE=" + String(GUARD_STALE),
+        "IDLE=" + String(GUARD_IDLE_EXIT),
         'log() { echo "[$(date +%H:%M:%S)] $*" >> "$LOG"; }',
-        'log "guard start port=$PORT_HEX gw=${GW:-none}"',
-        "RUN=" + AUDIO_GUARD_RUN,
-        // 无线接口名：默认 wlan0，用 ip link 探测实际名字（部分双频设备是别的）
+        'log "guard start session=$SESSION stale=${STALE}s"',
         "IFACE=$(ip link 2>/dev/null | sed -n 's/^[0-9]*: \\(wlan[^:]*\\):.*/\\1/p' | head -n 1)",
         'if [ -z "$IFACE" ]; then IFACE=wlan0; fi',
-        'log "iface=$IFACE"',
-        // GW 兜底解析（一）：ip route 的默认路由行，不用 awk（部分 toybox 没有）
-        `if [ -z "$GW" ]; then GW=$(ip route 2>/dev/null | sed -n 's/^default via \\([0-9]*\\.[0-9]*\\.[0-9]*\\.[0-9]*\\) dev wlan.*/\\1/p' | head -n 1); fi`,
-        // GW 兜底解析（二）：读 /proc/net/route，wlan* 上有默认路由 -> Gateway 字段是小端十六进制
-        'if [ -z "$GW" ]; then',
-        '  gwhex=""; while read -r rif rdest rgw _; do',
-        '    [ "$rdest" = "00000000" ] || continue',
-        '    case "$rif" in wlan*) gwhex="$rgw"; break ;; esac',
-        "  done < /proc/net/route",
-        '  if [ "${#gwhex}" -eq 8 ]; then GW="$((0x${gwhex:6:2})).$((0x${gwhex:4:2})).$((0x${gwhex:2:2})).$((0x${gwhex:0:2}))"; fi',
-        "fi",
-        'if [ -n "$GW" ]; then log "gateway=$GW"; fi',
-        "n=0; seen=0; hbSeen=0; t=0; netfail=0; neton=0; rseen=0; pfc=0",
-        "while true; do",
+        "had_ip=0; lost=0; tick=0; hb_seen=0",
+        "while :; do",
         "  now=$(date +%s)",
-        '  echo "$now" > "$RUN"',
-        "  hb=$(cat $HB 2>/dev/null)",
-        '  case "$hb" in ""|*[!0-9]*) hb="";; esac',
-        '  if [ -n "$hb" ]; then hbSeen=1; fi',
-        '  c=$(cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -c -E ":$PORT_HEX [0-9A-F]+:[0-9A-F]+ 01 ")',
-        '  if [ "${c:-0}" -gt 0 ]; then',
-        '    if [ "$seen" -eq 0 ]; then log "link up"; fi',
-        "    seen=1; n=0",
+        "  tick=$((tick+1))",
+        // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 5 轮（约 10 秒）一次
+        '  if [ "$tick" -le 1 ] || [ $((tick % 5)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
+        '  hb=$(cat "$HB" 2>/dev/null)',
+        "  hb_ts=${hb%% *}",
+        "  hb_sess=${hb#* }",
+        // 新会话接手：立刻退场，绝不动新会话的 scrcpy
+        '  if [ -n "$hb_sess" ] && [ "$hb_sess" != "$hb" ] && [ "$hb_sess" != "$SESSION" ]; then',
+        '    log "superseded by $hb_sess, exit"; exit 0',
+        "  fi",
+        '  case "$hb_ts" in ""|*[!0-9]*) hb_ts="";; esac',
+        '  if [ -n "$hb_ts" ]; then hb_seen=1; fi',
+        // Wi-Fi 地址消失是确定事实：连续 2 次（约 4 秒）即判定，不必等心跳过期
+        '  if ip -4 addr show "$IFACE" 2>/dev/null | grep -q "inet "; then',
+        "    had_ip=1; lost=0",
         "  else",
-        '    if [ "$seen" -eq 1 ]; then n=$((n+1)); fi',
+        '    [ "$had_ip" -eq 1 ] && lost=$((lost+1))',
         "  fi",
-        // 网络判据（主判据，三路探测任一为真即算在线）：
-        // a) wlan 接口有 IPv4 地址 —— Wi-Fi 一关/一断 DHCP 地址立即回收，最快最可靠；
-        // b) ip route 主表有 wlan 默认路由；
-        // c) /proc/net/route 主表有 wlan 默认路由（老设备兜底）。
-        // 只有见过在线（rseen=1）之后掉线才计数，避免探测全失效的手机被误杀。
-        // 另有网关 ping（路由在但网关死，比如路由器断电）：从未 ping 通过的不计数（pfc），
-        // 累计 5 次判定 ICMP 被屏蔽，退回只看在线判据+心跳。
-        "  netup=0",
-        `  ip -4 addr show "$IFACE" 2>/dev/null | grep -q 'inet ' && netup=1`,
-        `  [ "$netup" -eq 0 ] && ip route 2>/dev/null | grep -q '^default.*dev wlan' && netup=1`,
-        `  [ "$netup" -eq 0 ] && grep -q '^wlan[0-9]*[[:space:]]*00000000' /proc/net/route 2>/dev/null && netup=1`,
-        '  if [ "$netup" -eq 1 ]; then',
-        "    rseen=1",
-        '    if [ -n "$GW" ]; then',
-        '      if ping -c 1 -W 1 "$GW" >/dev/null 2>&1; then netfail=0; neton=1',
-        '      elif [ "$neton" -eq 1 ]; then netfail=$((netfail+1)); else pfc=$((pfc+1)); fi',
-        "    else",
-        "      netfail=0",
-        "    fi",
-        '  elif [ "$rseen" -eq 1 ]; then',
-        "    netfail=$((netfail+1))",
+        '  dead=0; why=""',
+        '  if [ "$lost" -ge 2 ]; then dead=1; why="wifi ip gone x$lost"; fi',
+        '  if [ -n "$hb_ts" ]; then',
+        "    age=$((now - hb_ts))",
+        '    if [ "$age" -gt "$STALE" ]; then dead=1; why="heartbeat ${age}s stale"; fi',
         "  fi",
-        '  if [ "$pfc" -ge 5 ] && [ "$neton" -eq 0 ]; then log "gw icmp blocked, fallback"; GW=""; pfc=0; netfail=0; fi',
-        '  dead=0; reason=""',
-        '  if [ "$netfail" -ge 3 ]; then dead=1; reason="net down (fail x$netfail)"; fi',
-        '  if [ "$seen" -eq 1 ] && [ "$n" -ge 2 ]; then dead=1; reason="port gone"; fi',
-        '  if [ -n "$hb" ] && [ $((now-hb)) -gt 45 ]; then dead=1; reason="heartbeat $((now-hb))s stale"; fi',
+        // 布防前一定先写心跳：读不到就是异常（写失败 / 文件被清），按失联处理，别让手机哑着
+        '  if [ "$hb_seen" -eq 0 ] && [ "$tick" -ge $((IDLE / 2)) ]; then dead=1; why="no heartbeat in ${IDLE}s"; fi',
         '  if [ "$dead" -eq 1 ]; then',
-        '    log "link dead ($reason) -> release scrcpy"',
+        '    log "session dead ($why) -> release scrcpy"',
         '    pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null',
-        "    sleep 2",
+        "    sleep 1",
         '    pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null',
         '    pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null',
-        "    sleep 1",
-        // 与网页端「强力恢复」一致的安全序列（不含会搞坏媒体时钟的 audioserver 重启）：
-        // 关勿扰 -> 直接设媒体音量(AudioService 重算路由) -> 播放/暂停(音频焦点重申请)。
-        // 注意：不按音量键 —— 音量键会弹音量条且可能改变用户音量（用户明确要求去掉）；
-        // 音量归零的场景已由 media volume --set 10 覆盖。
-        "    settings put global zen_mode 0 >/dev/null 2>&1",
-        "    media volume --stream 3 --set 10 >/dev/null 2>&1",
-        "    input keyevent 126 >/dev/null 2>&1",
-        "    sleep 0.5",
-        "    input keyevent 127 >/dev/null 2>&1",
+        // 只做净音量不变的「路由刷新」：不动勿扰、不按键、不改用户音量
+        "    " + AUDIO_ROUTE_CMD,
         '    remain=$(ps -A 2>/dev/null | grep -c "[c]om.genymobile.scrcpy")',
-        '    log "released, remain=$remain"',
+        '    log "released remain=$remain"',
         "    exit 0",
         "  fi",
-        "  t=$((t+1))",
-        '  if [ "$seen" -eq 0 ] && [ "$hbSeen" -eq 0 ] && [ "$t" -ge 300 ]; then log "no signal 10min, exit"; exit 0; fi',
         "  sleep 2",
         "done"
       ];
       return lines.join("\n");
     }
     async isAudioGuardAlive() {
-      if (!this.adb) return false;
+      if (!this.adb || !this._guardSession) return false;
       const out = await this.deviceShell(
-        "now=$(date +%s); r=$(cat " + AUDIO_GUARD_RUN + ' 2>/dev/null); r=$(echo "$r" | tr -dc "0-9"); if [ -n "$r" ] && [ $((now-r)) -lt 12 ]; then echo ALIVE; else echo DEAD; fi',
+        "now=$(date +%s); r=$(cat " + guardRunPath(this._guardSession) + ' 2>/dev/null); r=${r%% *}; case "$r" in ""|*[!0-9]*) echo DEAD ;; *) [ $((now-r)) -lt 25 ] && echo ALIVE || echo DEAD ;; esac',
         5e3
       );
       return /ALIVE/.test(String(out || "").trim());
@@ -13337,16 +13290,19 @@
     async readAudioGuardLog(lines = 8) {
       if (!this.adb) return "";
       const out = await this.deviceShell(
-        "tail -n " + lines + " " + AUDIO_GUARD_LOG + " 2>/dev/null",
+        "tail -n " + lines + " " + GUARD_LOG + " 2>/dev/null",
         5e3
       );
       return String(out || "").trim();
     }
-    /** 给手机端看门狗喂心跳（写入手机本地时间戳） */
+    /** 给手机端看门狗喂心跳：写入「本地时间戳 + 会话号」，写成功即证明通道还活着 */
     async heartbeat() {
-      if (!this.adb) return false;
+      if (!this.adb || !this._guardSession) return false;
       try {
-        await this.deviceShell("echo $(date +%s) > " + AUDIO_GUARD_HB, 5e3);
+        await this.deviceShell(
+          'echo "$(date +%s) ' + this._guardSession + '" > ' + guardHbPath(this._guardSession),
+          5e3
+        );
         return true;
       } catch {
         return false;
@@ -13359,16 +13315,31 @@
         5e3
       );
     }
+    /**
+     * 主动收尾（停止投屏 / 断线后仍能连上手机时）：看门狗退场 + scrcpy 结束 + 路由刷新。
+     * 一次 shell 跑完，替换原来 stopAudioGuard → kill（含 2 次 sleep）→ refresh 的串行往返。
+     */
+    async releaseSessionOnDevice() {
+      if (!this.adb) return false;
+      this._guardSession = "";
+      const out = String(
+        await this.deviceShell(
+          'pkill -TERM -f "[p]anda_guard.sh" 2>/dev/null; pkill -TERM -f "[c]om.genymobile.scrcpy" 2>/dev/null; sleep 0.45; pkill -9 -f "[p]anda_guard.sh" 2>/dev/null; pkill -9 -f "[c]om.genymobile.scrcpy" 2>/dev/null; pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null; ' + AUDIO_ROUTE_CMD + `; echo "REMAIN=$(ps -A 2>/dev/null | grep -c '[c]om.genymobile.scrcpy')"`,
+          15e3
+        ) || ""
+      );
+      const remain = Number((/REMAIN=(\d+)/.exec(out) || [])[1] || 0);
+      if (remain) this.onLog("\u624B\u673A\u7AEF scrcpy \u4ECD\u5728\u8FD0\u884C\uFF08" + remain + " \u4E2A\u8FDB\u7A0B\uFF09\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
+      return remain === 0;
+    }
     /** 终止手机端 scrcpy 并刷新音频路由（它会占着音频采集，导致手机一直没声音） */
     async releaseScrcpyOnDevice() {
       if (!this.adb) return false;
       try {
-        const ok = await Promise.race([
-          this.killScrcpyServerOnDevice(),
+        return await Promise.race([
+          this.releaseSessionOnDevice(),
           new Promise((resolve) => setTimeout(() => resolve(false), 12e3))
         ]);
-        if (ok) await this.refreshAudioRoute();
-        return ok === true;
       } catch {
         return false;
       }
@@ -13399,9 +13370,7 @@
         this.adb = conn.adb;
         const glog = await this.readAudioGuardLog(8);
         if (glog) this.onLog("\u770B\u95E8\u72D7\u65E5\u5FD7\uFF1A" + glog.replace(/\n/g, " | "));
-        const ok = await this.killScrcpyServerOnDevice();
-        await this.stopAudioGuard();
-        if (ok) await this.refreshAudioRoute();
+        const ok = await this.releaseSessionOnDevice();
         this.onLog(ok ? "\u5DF2\u7ED3\u675F\u624B\u673A\u7AEF scrcpy \u5E76\u5237\u65B0\u97F3\u9891\u8DEF\u7531" : "\u672A\u80FD\u7ED3\u675F\u624B\u673A\u7AEF scrcpy\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
         return ok;
       } catch (e) {
@@ -13483,9 +13452,7 @@
           } else {
             this.onLog("\u770B\u95E8\u72D7\u672A\u7559\u4E0B\u65E5\u5FD7\uFF1A\u672C\u8F6E\u53EF\u80FD\u672A\u542F\u52A8\u6210\u529F\uFF08\u82E5\u65E5\u5FD7\u5E38\u51FA\u73B0\u6B64\u884C\u8BF7\u53CD\u9988\uFF09");
           }
-          const ok = await this.killScrcpyServerOnDevice();
-          await this.stopAudioGuard();
-          if (ok) await this.refreshAudioRoute();
+          const ok = await this.releaseSessionOnDevice();
           this._lateActive = false;
           this.onLog(
             ok ? "\u624B\u673A\u5DF2\u91CD\u65B0\u4E0A\u7EBF\uFF0C\u5DF2\u7ED3\u675F\u6B8B\u7559 scrcpy \u5E76\u5237\u65B0\u97F3\u9891\u8DEF\u7531\uFF0C\u58F0\u97F3\u5E94\u5DF2\u6062\u590D" : "\u624B\u673A\u5DF2\u4E0A\u7EBF\u4F46\u672A\u80FD\u7ED3\u675F scrcpy\uFF0C\u8BF7\u70B9\u9876\u680F\u300C\u6062\u590D\u58F0\u97F3\u300D"
@@ -13644,7 +13611,13 @@
         this.client = null;
       }
       const o = this._opts || {};
-      const sdk = await this.getAndroidSdk();
+      let prep = { sdk: 0, remain: 0 };
+      try {
+        prep = await this.prepareDevice();
+      } catch (e) {
+        this.onLog("\u542F\u52A8\u524D\u6E05\u7406\u5F02\u5E38\uFF08\u4E0D\u5F71\u54CD\u7EE7\u7EED\u8FDE\u63A5\uFF09\uFF1A" + (e?.message || e));
+      }
+      const sdk = prep.sdk || await this.getAndroidSdk();
       const camMode = String(o.videoSource || "display").startsWith("camera");
       const audioMode = o.audioMode || "both";
       const wantDup = audioMode === "both";
@@ -13660,9 +13633,10 @@
           "Android API " + sdk + " \u4E0D\u652F\u6301\u300C\u624B\u673A\u540C\u65F6\u5916\u653E\u300D(\u9700 Android 13+)\uFF1B\u5DF2\u6539\u4E3A\u4E0D\u8F6C\u53D1\u97F3\u9891\uFF0C\u624B\u673A\u58F0\u97F3\u4FDD\u6301\u6B63\u5E38"
         );
       }
-      await this.stopAudioGuard();
-      await this.killScrcpyServerOnDevice();
-      if (this._wirelessTarget) await this.deployAudioGuard();
+      const guardTask = this._wirelessTarget ? this.deployAudioGuard().catch((e) => {
+        this.onLog("\u770B\u95E8\u72D7\u5E03\u9632\u5F02\u5E38\uFF08\u4E0D\u5F71\u54CD\u6295\u5C4F\uFF09\uFF1A" + (e?.message || e));
+        return false;
+      }) : Promise.resolve(false);
       await this.pushServer();
       this._mountRenderer();
       this.status("\u542F\u52A8\u6295\u5C4F\u2026");
@@ -13725,6 +13699,10 @@
       }
       this.client = await AdbScrcpyClient.start(this.adb, DefaultServerPath, options);
       if (!this.client) throw new MirrorError("scrcpy \u5BA2\u6237\u7AEF\u542F\u52A8\u5931\u8D25", "SCRCPY_FAIL");
+      if (this._wirelessTarget) {
+        const guardReady = await guardTask;
+        this.onLog(guardReady ? "\u770B\u95E8\u72D7\u5E03\u9632\u5B8C\u6210\uFF08\u4E0E\u542F\u52A8\u5E76\u884C\uFF0C\u4E0D\u5360\u8FDE\u63A5\u65F6\u95F4\uFF09" : "\u770B\u95E8\u72D7\u672A\u5E03\u9632\uFF0C\u65AD\u7F51\u65F6\u53EA\u80FD\u9760\u91CD\u8FDE\u540E\u6E05\u7406");
+      }
       const logSink = (msg) => this.onLog(String(msg));
       this.client.output.pipeTo(
         new WritableStream({
@@ -13895,24 +13873,28 @@
       }
       this.audio = new AudioMirror();
       try {
-        await this._wirelessDispose?.();
-      } catch {
-      }
-      this._wirelessDispose = null;
-      try {
-        await this.client?.close();
+        await Promise.race([
+          this.client?.close(),
+          new Promise((resolve) => setTimeout(resolve, 1500))
+        ]);
       } catch {
       }
       this.client = null;
       this._teardownRenderer();
       try {
-        await this.stopAudioGuard();
-        const ok = await this.killScrcpyServerOnDevice();
-        if (ok) await this.refreshAudioRoute();
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        await this.adb?.close();
+        if (this.adb) {
+          await Promise.race([
+            this.releaseSessionOnDevice(),
+            new Promise((resolve) => setTimeout(resolve, 6e3))
+          ]);
+        }
       } catch {
       }
+      try {
+        await this._wirelessDispose?.();
+      } catch {
+      }
+      this._wirelessDispose = null;
       this.adb = null;
       try {
         if (this.device?.raw?.opened) await this.device.raw.close();
@@ -13956,6 +13938,7 @@
         this._wirelessTarget = "";
         this._wirelessLastRecv = null;
         this._wirelessServerUploaded = "";
+        this._guardSession = "";
         await this.requestDevice(preferSerial);
         await this.connectAndAuth();
         await this.startStream();
@@ -13981,6 +13964,7 @@
         };
         this._usbDispose = info.dispose;
         this._wirelessTarget = "";
+        this._guardSession = "";
         await prepareUsbServer(info.serial, (s) => this.status(s));
         this._usbServerUploaded = info.serial;
         await this.startStream();
@@ -13992,14 +13976,18 @@
     async startWireless(target, opts) {
       if (this._starting) return;
       this._starting = true;
+      const t0 = performance.now();
       try {
         this._opts = opts || {};
         this._wirelessTarget = target;
         this._wirelessServerUploaded = "";
+        this._guardSession = "";
         this.status("\u65E0\u7EBF\u4E0A\u4F20\u4E2D\u2026");
         await this.pushServerWireless(target);
+        const t1 = performance.now();
         this.status("\u65E0\u7EBF\u8FDE\u63A5\u4E2D\u2026");
         const { adb, dispose, lastRecv } = await connectWireless(target, (s) => this.status(s));
+        const t2 = performance.now();
         this.adb = adb;
         this._wirelessDispose = dispose;
         this._wirelessLastRecv = lastRecv || null;
@@ -14010,6 +13998,11 @@
           rawDevice: null
         };
         await this.startStream();
+        const t3 = performance.now();
+        const sec = (from, to) => ((to - from) / 1e3).toFixed(1);
+        this.onLog(
+          `\u65E0\u7EBF\u8FDE\u63A5\u8017\u65F6 ${sec(t0, t3)}s\uFF08\u9884\u4E0A\u4F20 ${sec(t0, t1)}s / \u63E1\u624B ${sec(t1, t2)}s / \u542F\u52A8 ${sec(t2, t3)}s\uFF09`
+        );
       } finally {
         this._starting = false;
       }
@@ -14303,14 +14296,17 @@
       nh = 9;
     }
     const ratio = nw / nh;
+    const cs = getComputedStyle(stage);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
     let maxW, maxH;
     if (fs) {
       maxW = window.innerWidth - 100;
-      maxH = window.innerHeight - 8;
+      maxH = window.innerHeight - padY;
     } else {
       const rect = stage.getBoundingClientRect();
-      maxW = Math.max(120, rect.width - 8);
-      maxH = Math.max(120, rect.height - 8);
+      maxW = Math.max(120, rect.width - padX - 8);
+      maxH = Math.max(120, rect.height - padY - 8);
     }
     let dw = maxW;
     let dh = dw / ratio;
@@ -14327,34 +14323,36 @@
     positionHud(canvas);
   }
   function positionHud(canvas) {
-    const appEl = document.getElementById("app");
-    if (!appEl || !canvas) return;
+    if (document.getElementById("hud-dock")) return;
+    const layout = document.getElementById("mirror-layout");
+    if (!layout || !canvas) return;
     const tl = document.querySelector(".hud-tl");
     const bl = document.querySelector(".hud-bl");
     const tr = document.querySelector(".hud-tr");
     const br = document.querySelector(".hud-br");
     if (!tl || !bl || !tr || !br) return;
-    const open = appEl.classList.contains("drawer-open");
-    if (!open) {
-      tl.style.left = bl.style.left = "";
-      tr.style.right = br.style.right = "";
-      return;
-    }
     const cr = canvas.getBoundingClientRect();
-    const ar = appEl.getBoundingClientRect();
-    if (!cr.width || !ar.width) return;
-    const gap = 12;
-    if (appEl.classList.contains("sidebar-right")) {
-      const right = Math.round(ar.right - cr.right + gap) + "px";
-      tr.style.right = right;
-      br.style.right = right;
-      tl.style.left = bl.style.left = "";
-    } else {
-      const left = Math.round(cr.left - ar.left + gap) + "px";
-      tl.style.left = left;
-      bl.style.left = left;
-      tr.style.right = br.style.right = "";
-    }
+    const ar = layout.getBoundingClientRect();
+    if (!cr.width || !cr.height || !ar.width) return;
+    const gap = 6;
+    const left = Math.round(cr.left - ar.left);
+    const right = Math.round(ar.right - cr.right);
+    const top = Math.round(cr.top - ar.top);
+    const bottom = Math.round(cr.bottom - ar.top);
+    const frameW = Math.round(cr.width);
+    const hOf = (el) => Math.round(el.getBoundingClientRect().height) || 30;
+    const clampTop = (value, height) => Math.max(2, Math.min(value, Math.round(ar.height - height - 2)));
+    [tl, tr, bl, br].forEach((el) => {
+      el.style.maxWidth = frameW + "px";
+    });
+    tl.style.left = left + "px";
+    tl.style.top = clampTop(top - hOf(tl) - gap, hOf(tl)) + "px";
+    tr.style.right = right + "px";
+    tr.style.top = clampTop(top - hOf(tr) - gap, hOf(tr)) + "px";
+    bl.style.left = left + "px";
+    bl.style.top = clampTop(bottom + gap, hOf(bl)) + "px";
+    br.style.right = right + "px";
+    br.style.top = clampTop(bottom + gap, hOf(br)) + "px";
   }
   function setViewRotate(deg) {
     const canvas = document.querySelector("#stage canvas");
@@ -14561,7 +14559,7 @@
   function startHeartbeatWorker() {
     stopHeartbeatWorker();
     try {
-      const code = "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},8000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
+      const code = "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},5000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
       const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       hbWorker = new Worker(url);
       hbWorker.onmessage = () => {
@@ -14572,7 +14570,7 @@
       logLine("log", "\u5FC3\u8DF3 Worker \u4E0D\u53EF\u7528\uFF0C\u6539\u7528\u9875\u9762\u5B9A\u65F6\u5668\uFF1A" + String(e?.message || e));
       hbFallback = setInterval(() => {
         if (mirror.running) mirror.heartbeat();
-      }, 1e4);
+      }, 6e3);
     }
   }
   function stopHeartbeatWorker() {
@@ -14814,6 +14812,10 @@
       startWifiKeepAlive(target);
     } catch (err) {
       logLine("error", "\u65E0\u7EBF\u8FDE\u63A5\u5931\u8D25 " + String(err?.message || err));
+      try {
+        mirror.status("\u8FDE\u63A5\u5931\u8D25");
+      } catch {
+      }
       showFail(err);
     } finally {
       if ($("btn-wireless")) $("btn-wireless").disabled = false;

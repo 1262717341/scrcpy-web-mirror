@@ -49,7 +49,7 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.0.11"
+APP_VERSION = "4.0.12"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
@@ -763,9 +763,24 @@ class Handler(SimpleHTTPRequestHandler):
                         creationflags=CREATE_NO_WINDOW,
                     )
                 try:
+                    t_begin = time.time()
                     connected = run_adb(["connect", target], 12)
                     if connected.returncode != 0:
                         raise RuntimeError((connected.stdout + connected.stderr).strip())
+                    # 手机端已有一份大小一致的 jar 就不重复推：省掉一次 700 KB 传输
+                    local_size = server_jar.stat().st_size
+                    probe = run_adb([
+                        "-s", target, "shell", "stat", "-c", "%s",
+                        "/data/local/tmp/scrcpy-server.jar",
+                    ], 8)
+                    remote_text = (probe.stdout or "").strip()
+                    remote_size = int(remote_text) if probe.returncode == 0 and remote_text.isdigit() else -1
+                    if remote_size == local_size:
+                        output = "server 已存在且大小一致，跳过上传"
+                        wlog("wireless push skip target=" + target + " size=" + str(local_size)
+                             + " cost=" + ("%.2f" % (time.time() - t_begin)) + "s")
+                        json_response(self, 200, {"ok": True, "skipped": True, "output": output})
+                        return
                     pushed = run_adb([
                         "-s", target, "push", str(server_jar),
                         "/data/local/tmp/scrcpy-server.jar",
@@ -773,8 +788,9 @@ class Handler(SimpleHTTPRequestHandler):
                     output = (pushed.stdout + pushed.stderr).strip()
                     if pushed.returncode != 0:
                         raise RuntimeError(output)
-                    wlog("wireless push ok target=" + target + " " + output)
-                    json_response(self, 200, {"ok": True, "output": output})
+                    wlog("wireless push ok target=" + target + " " + output
+                         + " cost=" + ("%.2f" % (time.time() - t_begin)) + "s")
+                    json_response(self, 200, {"ok": True, "skipped": False, "output": output})
                 finally:
                     try:
                         run_adb(["disconnect", target], 5)

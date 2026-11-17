@@ -340,14 +340,18 @@ function fitCanvas() {
     nh = 9;
   }
   const ratio = nw / nh;
+  const cs = getComputedStyle(stage);
+  // stage 现在上下留了 --hud-gap 的净空给四角读数，算可用区必须减掉 padding
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
   let maxW, maxH;
   if (fs) {
     maxW = window.innerWidth - 100;
-    maxH = window.innerHeight - 8;
+    maxH = window.innerHeight - padY;
   } else {
     const rect = stage.getBoundingClientRect();
-    maxW = Math.max(120, rect.width - 8);
-    maxH = Math.max(120, rect.height - 8);
+    maxW = Math.max(120, rect.width - padX - 8);
+    maxH = Math.max(120, rect.height - padY - 8);
   }
   let dw = maxW;
   let dh = dw / ratio;
@@ -365,36 +369,43 @@ function fitCanvas() {
   positionHud(canvas);
 }
 
-/* 让左右两组角标跟随画布可见边缘，抽屉展开时不会被侧栏压住 */
+/* 让四角读数贴在画面外侧的净空里：左列对齐画面左边、右列对齐画面右边，
+ * 上排落在画面上方的留白、下排落在画面下方的留白——任何比例下都不压住画面。 */
 function positionHud(canvas) {
-  const appEl = document.getElementById("app");
-  if (!appEl || !canvas) return;
+  // 读数已收进侧栏底部浮条（#hud-dock）：由 CSS 定位，不再按画面坐标摆放
+  if (document.getElementById("hud-dock")) return;
+  const layout = document.getElementById("mirror-layout");
+  if (!layout || !canvas) return;
   const tl = document.querySelector(".hud-tl");
   const bl = document.querySelector(".hud-bl");
   const tr = document.querySelector(".hud-tr");
   const br = document.querySelector(".hud-br");
   if (!tl || !bl || !tr || !br) return;
-  const open = appEl.classList.contains("drawer-open");
-  if (!open) {
-    tl.style.left = bl.style.left = "";
-    tr.style.right = br.style.right = "";
-    return;
-  }
   const cr = canvas.getBoundingClientRect();
-  const ar = appEl.getBoundingClientRect();
-  if (!cr.width || !ar.width) return;
-  const gap = 12;
-  if (appEl.classList.contains("sidebar-right")) {
-    const right = Math.round(ar.right - cr.right + gap) + "px";
-    tr.style.right = right;
-    br.style.right = right;
-    tl.style.left = bl.style.left = "";
-  } else {
-    const left = Math.round(cr.left - ar.left + gap) + "px";
-    tl.style.left = left;
-    bl.style.left = left;
-    tr.style.right = br.style.right = "";
-  }
+  const ar = layout.getBoundingClientRect();
+  if (!cr.width || !cr.height || !ar.width) return;
+
+  const gap = 6;
+  const left = Math.round(cr.left - ar.left);
+  const right = Math.round(ar.right - cr.right);
+  const top = Math.round(cr.top - ar.top);
+  const bottom = Math.round(cr.bottom - ar.top);
+  const frameW = Math.round(cr.width);
+
+  // 量一次实际高度（两行读数约 30px，单行约 14px），再据此贴边，换字号也不会越界
+  const hOf = (el) => Math.round(el.getBoundingClientRect().height) || 30;
+  const clampTop = (value, height) => Math.max(2, Math.min(value, Math.round(ar.height - height - 2)));
+
+  [tl, tr, bl, br].forEach((el) => { el.style.maxWidth = frameW + "px"; });
+
+  tl.style.left = left + "px";
+  tl.style.top = clampTop(top - hOf(tl) - gap, hOf(tl)) + "px";
+  tr.style.right = right + "px";
+  tr.style.top = clampTop(top - hOf(tr) - gap, hOf(tr)) + "px";
+  bl.style.left = left + "px";
+  bl.style.top = clampTop(bottom + gap, hOf(bl)) + "px";
+  br.style.right = right + "px";
+  br.style.top = clampTop(bottom + gap, hOf(br)) + "px";
 }
 
 function setViewRotate(deg) {
@@ -625,8 +636,8 @@ function showFail(err) {
 }
 
 /* ---------- 心跳 Worker ----------
- * 后台标签页会把主线程定时器压到 1 分钟一次，那样看门狗会以为链路已死、误杀正常投屏。
- * Worker 有独立事件循环，不受这个节流影响，所以心跳交给它发。
+ * 看门狗只认「心跳」：页面每 5 秒通过现有 ADB 通道写一次，写进去就证明通道还活着。
+ * 后台标签页会把主线程定时器压到 1 分钟一次，那样看门狗会误判失联，所以心跳交给 Worker。
  */
 let hbWorker = null;
 let hbFallback = null;
@@ -634,7 +645,7 @@ function startHeartbeatWorker() {
   stopHeartbeatWorker();
   try {
     const code =
-      "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},8000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
+      "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},5000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
     const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
     hbWorker = new Worker(url);
     hbWorker.onmessage = () => {
@@ -643,11 +654,11 @@ function startHeartbeatWorker() {
     hbWorker.postMessage("start");
   } catch (e) {
     // Worker 起不来（CSP 拦了 blob: 等）必须补一个定时器，
-    // 否则心跳只在布防时写一次，90 秒后看门狗会把正常投屏当成断线杀掉。
+    // 否则心跳只在布防时写一次，30 秒后看门狗会把正常投屏当成断线杀掉。
     logLine("log", "心跳 Worker 不可用，改用页面定时器：" + String(e?.message || e));
     hbFallback = setInterval(() => {
       if (mirror.running) mirror.heartbeat();
-    }, 10000);
+    }, 6000);
   }
 }
 function stopHeartbeatWorker() {
@@ -957,6 +968,12 @@ async function connectWifi() {
     startWifiKeepAlive(target);
   } catch (err) {
     logLine("error", "无线连接失败 " + String(err?.message || err));
+    // 失败后别把状态停在「握手中 / 上传中」：那个旧文案会让人以为还在连
+    try {
+      mirror.status("连接失败");
+    } catch {
+      /* ignore */
+    }
     showFail(err);
   } finally {
     if ($("btn-wireless")) $("btn-wireless").disabled = false;
