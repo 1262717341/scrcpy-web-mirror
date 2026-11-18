@@ -49,7 +49,7 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.0.13"
+APP_VERSION = "4.0.14"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
