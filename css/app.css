@@ -17,8 +17,8 @@
   --info: #83aec9;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  /* 画面上下留出的净空：四角读数只住在这里，永远不压在画面上 */
-  --hud-gap: 38px;
+  /* 画面上下安全边距（四角读数已移到侧栏 dock，这里只留防贴边的小净空） */
+  --hud-gap: 6px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -435,7 +435,7 @@ body { font-size: 14px; }
   .side-left, .side-right { top: 8px; right: 8px; bottom: 81px; left: 8px; width: auto; }
   .drawer { max-width: none; }
   .hud { font-size: 10px; max-width: 52%; }
-  :root { --hud-gap: 34px; }
+  :root { --hud-gap: 6px; }
   .hud-sub { display: none; }
   .hud-metric b { max-width: 130px; }
   /* 窄屏：读数条跟侧栏同宽，排在抽屉下面 */

@@ -19,16 +19,50 @@ export class DeviceController {
    * @param {import("@yume-chan/adb-scrcpy").AdbScrcpyClient} client
    * @param {{ width: () => number, height: () => number }} sizeSource
    */
-  constructor(client, sizeSource, adb) {
+  constructor(client, sizeSource, adb, hooks = {}) {
     this.client = client;
     this.adb = adb;
     this.sizeSource = sizeSource;
-    /** Map<pointerId, true> */
+    /** Map<pointerId, { x, y, downAt }> */
     this.active = new Map();
     this._textBuf = "";
     this._textTimer = null;
     this._clipWaiters = [];
     this._clipDrained = false;
+    /** 写入异常回调：(err, where) => void，供页面打日志/提示 */
+    this.onError = typeof hooks.onError === "function" ? hooks.onError : () => {};
+  }
+
+  _report(err, where) {
+    try {
+      this.onError(err, where);
+    } catch {
+      /* 回调自身异常不阻断控制流程 */
+    }
+  }
+
+  /** 控制通道是否还可用（client/controller 已被清理时为 false） */
+  get alive() {
+    return !!this.controller;
+  }
+
+  /**
+   * 写入控制指令并加超时竞速：
+   * 无线拥塞 / 连接半开时 writer.write 可能永久 pending，
+   * 不超时会把后续所有触控排在同一个挂起 Promise 后面，表现为「点不动」。
+   */
+  async _write(fn, where) {
+    const c = this.controller;
+    if (!c) throw new Error("控制通道未连接");
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("控制指令发送超时")), 2000);
+    });
+    try {
+      await Promise.race([fn(c), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** 持续排空设备→电脑剪贴板流,记录最新值并唤醒等待者 */
@@ -123,74 +157,114 @@ export class DeviceController {
   }
 
   async touch(action, pointerId, x, y, pressure = 1, buttons = AndroidMotionEventButton.Primary) {
-    const c = this.controller;
-    if (!c) return;
     const { w, h } = this._dims();
-    await c.injectTouch({
-      action,
-      pointerId: BigInt(pointerId) & 0xffffffffffffffffn,
-      pointerX: x,
-      pointerY: y,
-      videoWidth: w,
-      videoHeight: h,
-      pressure,
-      buttons,
-    });
+    await this._write(
+      (c) =>
+        c.injectTouch({
+          action,
+          pointerId: BigInt(pointerId) & 0xffffffffffffffffn,
+          pointerX: x,
+          pointerY: y,
+          videoWidth: w,
+          videoHeight: h,
+          pressure,
+          buttons,
+        }),
+      "touch"
+    );
   }
 
   async pointerDown(pointerId, x, y) {
-    if (this.active.has(pointerId)) return this.pointerMove(pointerId, x, y);
+    // 上一次按压没收到 up（窗口失焦 / 指针移出 / 写入异常残留）：
+    // 先补发 Cancel 清掉设备端旧态，再重新 Down，否则会被降级成 Move，点不出点击。
+    const stale = this.active.get(pointerId);
+    if (stale) {
+      this.active.delete(pointerId);
+      try {
+        await this.touch(AndroidMotionEventAction.Cancel, pointerId, stale.x, stale.y, 0);
+      } catch (e) {
+        this._report(e, "pointerDown-cancel-stale");
+      }
+    }
     if (this.active.size >= MAX_TOUCH) return;
-    this.active.set(pointerId, { x, y });
-    await this.touch(AndroidMotionEventAction.Down, pointerId, x, y);
+    this.active.set(pointerId, { x, y, downAt: Date.now() });
+    try {
+      await this.touch(AndroidMotionEventAction.Down, pointerId, x, y);
+    } catch (e) {
+      // 写入失败必须清掉本地按压态，否则该指针会一直卡在「已按下」
+      this.active.delete(pointerId);
+      this._report(e, "pointerDown");
+    }
   }
 
   async pointerMove(pointerId, x, y) {
-    if (!this.active.has(pointerId)) return;
-    this.active.set(pointerId, { x, y });
-    await this.touch(AndroidMotionEventAction.Move, pointerId, x, y);
+    const last = this.active.get(pointerId);
+    if (!last) return;
+    this.active.set(pointerId, { x, y, downAt: last.downAt });
+    try {
+      await this.touch(AndroidMotionEventAction.Move, pointerId, x, y);
+    } catch (e) {
+      this._report(e, "pointerMove");
+    }
   }
 
   async pointerUp(pointerId) {
     const last = this.active.get(pointerId);
     if (!last) return;
     this.active.delete(pointerId);
-    await this.touch(AndroidMotionEventAction.Up, pointerId, last.x, last.y, 0);
+    try {
+      await this.touch(AndroidMotionEventAction.Up, pointerId, last.x, last.y, 0);
+    } catch (e) {
+      this._report(e, "pointerUp");
+    }
   }
 
   async pointerCancel(pointerId) {
     const last = this.active.get(pointerId);
     if (!last) return;
     this.active.delete(pointerId);
-    await this.touch(AndroidMotionEventAction.Cancel, pointerId, last.x, last.y, 0);
+    try {
+      await this.touch(AndroidMotionEventAction.Cancel, pointerId, last.x, last.y, 0);
+    } catch (e) {
+      this._report(e, "pointerCancel");
+    }
   }
 
+  /** 释放所有残留按压（窗口失焦 / 断线 / 重新绑定前调用） */
   async releaseAllPointers() {
     for (const id of [...this.active.keys()]) {
-      await this.pointerUp(id).catch(() => {});
+      await this.pointerCancel(id).catch(() => {});
     }
     this.active.clear();
   }
 
   async scroll(x, y, dx, dy) {
-    const c = this.controller;
-    if (!c) return;
     const { w, h } = this._dims();
-    await c.injectScroll({
-      pointerX: x,
-      pointerY: y,
-      videoWidth: w,
-      videoHeight: h,
-      scrollX: dx,
-      scrollY: dy,
-      buttons: 0,
-    });
+    try {
+      await this._write((c) =>
+        c.injectScroll({
+          pointerX: x,
+          pointerY: y,
+          videoWidth: w,
+          videoHeight: h,
+          scrollX: dx,
+          scrollY: dy,
+          buttons: 0,
+        })
+      );
+    } catch (e) {
+      this._report(e, "scroll");
+    }
   }
 
   async key(action, keyCode, metaState = 0) {
-    const c = this.controller;
-    if (!c) return;
-    await c.injectKeyCode({ action, keyCode, metaState, repeat: 0 });
+    try {
+      await this._write((c) =>
+        c.injectKeyCode({ action, keyCode, metaState, repeat: 0 })
+      );
+    } catch (e) {
+      this._report(e, "key");
+    }
   }
 
   async tapKey(keyCode, metaState = 0) {

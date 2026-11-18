@@ -326,8 +326,11 @@ function fitCanvas() {
     !!document.fullscreenElement ||
     !!$("mirror-layout")?.classList.contains("is-fullscreen");
 
-  let nw = Number(canvas.width) || Number(canvas.videoWidth) || 0;
-  let nh = Number(canvas.height) || Number(canvas.videoHeight) || 0;
+  // 比例优先取设备真实帧尺寸（mirror._size），其次画布内部分辨率，最后读状态文本兜底
+  let liveSize = null;
+  try { liveSize = mirror._size; } catch { liveSize = null; }
+  let nw = Number(liveSize?.width) || Number(canvas.width) || Number(canvas.videoWidth) || 0;
+  let nh = Number(liveSize?.height) || Number(canvas.height) || Number(canvas.videoHeight) || 0;
   if (!nw || !nh) {
     const res = ($("stat-res")?.textContent || "").match(/(\d+)\s*[x×]\s*(\d+)/i);
     if (res) {
@@ -341,17 +344,18 @@ function fitCanvas() {
   }
   const ratio = nw / nh;
   const cs = getComputedStyle(stage);
-  // stage 现在上下留了 --hud-gap 的净空给四角读数，算可用区必须减掉 padding
   const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
   const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  // 只留 4px 安全边距；四角读数已移到侧栏，舞台上下不再预留大段净空
+  const GAP = 4;
   let maxW, maxH;
   if (fs) {
-    maxW = window.innerWidth - 100;
+    maxW = window.innerWidth - GAP * 2;
     maxH = window.innerHeight - padY;
   } else {
     const rect = stage.getBoundingClientRect();
-    maxW = Math.max(120, rect.width - padX - 8);
-    maxH = Math.max(120, rect.height - padY - 8);
+    maxW = Math.max(120, rect.width - padX - GAP * 2);
+    maxH = Math.max(120, rect.height - padY - GAP * 2);
   }
   let dw = maxW;
   let dh = dw / ratio;
@@ -494,30 +498,45 @@ function runAct(act) {
     });
 }
 
+// 上一轮绑定挂在 window/document 上的兜底释放函数，重新绑定时先摘掉，避免闭包堆积
+let _globalRelease = null;
+let _globalVis = null;
+
 function bindControl(controller, canvas) {
   ctrl = controller;
   if (!canvas) return;
+
+  // 重新绑定前释放上一轮残留按压，避免旧指针态卡在设备端
+  controller.releaseAllPointers().catch(() => {});
+
   const pos = (e) => controller.toDevice(e.clientX, e.clientY, canvas);
-  canvas.addEventListener("pointerdown", async (e) => {
+  // 所有触控事件统一走 Promise 兜底：写入异常打日志，且不抛出未处理 rejection
+  const safe = (fn) => (e) => {
+    Promise.resolve(fn(e)).catch((err) => {
+      logLine("error", "触控事件失败 " + String(err?.message || err));
+    });
+  };
+
+  canvas.addEventListener("pointerdown", safe(async (e) => {
     e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
+    try { canvas.setPointerCapture?.(e.pointerId); } catch { /* 捕获失败不阻断 */ }
     const { x, y } = pos(e);
     await controller.pointerDown(e.pointerId, x, y);
-  });
-  canvas.addEventListener("pointermove", async (e) => {
+  }));
+  canvas.addEventListener("pointermove", safe(async (e) => {
     if (!controller.active.has(e.pointerId)) return;
     e.preventDefault();
     const { x, y } = pos(e);
     await controller.pointerMove(e.pointerId, x, y);
-  });
-  const up = (e) => controller.pointerUp(e.pointerId);
+  }));
+  const up = safe((e) => controller.pointerUp(e.pointerId));
   canvas.addEventListener("pointerup", up);
-  canvas.addEventListener("pointercancel", (e) => controller.pointerCancel(e.pointerId));
+  canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)));
   canvas.addEventListener("lostpointercapture", up);
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener(
     "wheel",
-    async (e) => {
+    safe(async (e) => {
       e.preventDefault();
       const { x, y } = pos(e);
       await controller.scroll(
@@ -526,9 +545,23 @@ function bindControl(controller, canvas) {
         Math.max(-1, Math.min(1, -e.deltaX / 320)),
         Math.max(-1, Math.min(1, -e.deltaY / 320))
       );
-    },
+    }),
     { passive: false }
   );
+
+  // 全局兜底：窗口失焦 / 指针在画面外被取消 / 页面切到后台时，释放所有按压。
+  // 否则某次 pointerup 丢失后，该指针会一直卡在「已按下」，下次点击被当成 Move，点不出点击。
+  if (_globalRelease) {
+    window.removeEventListener("blur", _globalRelease);
+    document.removeEventListener("pointercancel", _globalRelease);
+  }
+  if (_globalVis) document.removeEventListener("visibilitychange", _globalVis);
+  _globalRelease = () => controller.releaseAllPointers().catch(() => {});
+  _globalVis = () => { if (document.hidden) _globalRelease(); };
+  window.addEventListener("blur", _globalRelease);
+  document.addEventListener("pointercancel", _globalRelease);
+  document.addEventListener("visibilitychange", _globalVis);
+
   fitCanvas();
 }
 
@@ -553,6 +586,7 @@ const mirror = new AdbMirror({
     }
     if (text === "已断开" || text === "投屏已结束") {
       document.body.classList.remove("mirroring");
+      ctrl = null;
       setStepsDone(0);
       // 断开即无画面：清掉舞台内容，恢复占位符（v3.0.17 起不再保留冻结帧）
       if ($("placeholder")) {
@@ -603,6 +637,9 @@ const mirror = new AdbMirror({
     logLine("ok", "首帧已渲染");
   },
   onController(controller, canvas) {
+    controller.onError = (err, where) => {
+      logLine("error", "控制指令 " + where + " 失败: " + String(err?.message || err));
+    };
     bindControl(controller, canvas);
   },
   onLog: (msg) => logLine("log", String(msg)),

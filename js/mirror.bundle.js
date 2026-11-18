@@ -11524,7 +11524,7 @@
      * @param {import("@yume-chan/adb-scrcpy").AdbScrcpyClient} client
      * @param {{ width: () => number, height: () => number }} sizeSource
      */
-    constructor(client, sizeSource, adb) {
+    constructor(client, sizeSource, adb, hooks = {}) {
       this.client = client;
       this.adb = adb;
       this.sizeSource = sizeSource;
@@ -11533,6 +11533,36 @@
       this._textTimer = null;
       this._clipWaiters = [];
       this._clipDrained = false;
+      this.onError = typeof hooks.onError === "function" ? hooks.onError : () => {
+      };
+    }
+    _report(err, where) {
+      try {
+        this.onError(err, where);
+      } catch {
+      }
+    }
+    /** 控制通道是否还可用（client/controller 已被清理时为 false） */
+    get alive() {
+      return !!this.controller;
+    }
+    /**
+     * 写入控制指令并加超时竞速：
+     * 无线拥塞 / 连接半开时 writer.write 可能永久 pending，
+     * 不超时会把后续所有触控排在同一个挂起 Promise 后面，表现为「点不动」。
+     */
+    async _write(fn, where) {
+      const c = this.controller;
+      if (!c) throw new Error("\u63A7\u5236\u901A\u9053\u672A\u8FDE\u63A5");
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("\u63A7\u5236\u6307\u4EE4\u53D1\u9001\u8D85\u65F6")), 2e3);
+      });
+      try {
+        await Promise.race([fn(c), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
     }
     /** 持续排空设备→电脑剪贴板流,记录最新值并唤醒等待者 */
     _ensureClipboardDrain() {
@@ -11615,68 +11645,104 @@
       return { x: nx * w, y: ny * h };
     }
     async touch(action, pointerId, x, y, pressure = 1, buttons = AndroidMotionEventButton.Primary) {
-      const c = this.controller;
-      if (!c) return;
       const { w, h } = this._dims();
-      await c.injectTouch({
-        action,
-        pointerId: BigInt(pointerId) & 0xffffffffffffffffn,
-        pointerX: x,
-        pointerY: y,
-        videoWidth: w,
-        videoHeight: h,
-        pressure,
-        buttons
-      });
+      await this._write(
+        (c) => c.injectTouch({
+          action,
+          pointerId: BigInt(pointerId) & 0xffffffffffffffffn,
+          pointerX: x,
+          pointerY: y,
+          videoWidth: w,
+          videoHeight: h,
+          pressure,
+          buttons
+        }),
+        "touch"
+      );
     }
     async pointerDown(pointerId, x, y) {
-      if (this.active.has(pointerId)) return this.pointerMove(pointerId, x, y);
+      const stale = this.active.get(pointerId);
+      if (stale) {
+        this.active.delete(pointerId);
+        try {
+          await this.touch(AndroidMotionEventAction.Cancel, pointerId, stale.x, stale.y, 0);
+        } catch (e) {
+          this._report(e, "pointerDown-cancel-stale");
+        }
+      }
       if (this.active.size >= MAX_TOUCH) return;
-      this.active.set(pointerId, { x, y });
-      await this.touch(AndroidMotionEventAction.Down, pointerId, x, y);
+      this.active.set(pointerId, { x, y, downAt: Date.now() });
+      try {
+        await this.touch(AndroidMotionEventAction.Down, pointerId, x, y);
+      } catch (e) {
+        this.active.delete(pointerId);
+        this._report(e, "pointerDown");
+      }
     }
     async pointerMove(pointerId, x, y) {
-      if (!this.active.has(pointerId)) return;
-      this.active.set(pointerId, { x, y });
-      await this.touch(AndroidMotionEventAction.Move, pointerId, x, y);
+      const last = this.active.get(pointerId);
+      if (!last) return;
+      this.active.set(pointerId, { x, y, downAt: last.downAt });
+      try {
+        await this.touch(AndroidMotionEventAction.Move, pointerId, x, y);
+      } catch (e) {
+        this._report(e, "pointerMove");
+      }
     }
     async pointerUp(pointerId) {
       const last = this.active.get(pointerId);
       if (!last) return;
       this.active.delete(pointerId);
-      await this.touch(AndroidMotionEventAction.Up, pointerId, last.x, last.y, 0);
+      try {
+        await this.touch(AndroidMotionEventAction.Up, pointerId, last.x, last.y, 0);
+      } catch (e) {
+        this._report(e, "pointerUp");
+      }
     }
     async pointerCancel(pointerId) {
       const last = this.active.get(pointerId);
       if (!last) return;
       this.active.delete(pointerId);
-      await this.touch(AndroidMotionEventAction.Cancel, pointerId, last.x, last.y, 0);
+      try {
+        await this.touch(AndroidMotionEventAction.Cancel, pointerId, last.x, last.y, 0);
+      } catch (e) {
+        this._report(e, "pointerCancel");
+      }
     }
+    /** 释放所有残留按压（窗口失焦 / 断线 / 重新绑定前调用） */
     async releaseAllPointers() {
       for (const id of [...this.active.keys()]) {
-        await this.pointerUp(id).catch(() => {
+        await this.pointerCancel(id).catch(() => {
         });
       }
       this.active.clear();
     }
     async scroll(x, y, dx, dy) {
-      const c = this.controller;
-      if (!c) return;
       const { w, h } = this._dims();
-      await c.injectScroll({
-        pointerX: x,
-        pointerY: y,
-        videoWidth: w,
-        videoHeight: h,
-        scrollX: dx,
-        scrollY: dy,
-        buttons: 0
-      });
+      try {
+        await this._write(
+          (c) => c.injectScroll({
+            pointerX: x,
+            pointerY: y,
+            videoWidth: w,
+            videoHeight: h,
+            scrollX: dx,
+            scrollY: dy,
+            buttons: 0
+          })
+        );
+      } catch (e) {
+        this._report(e, "scroll");
+      }
     }
     async key(action, keyCode, metaState = 0) {
-      const c = this.controller;
-      if (!c) return;
-      await c.injectKeyCode({ action, keyCode, metaState, repeat: 0 });
+      try {
+        await this._write(
+          (c) => c.injectKeyCode({ action, keyCode, metaState, repeat: 0 })
+        );
+      } catch (e) {
+        this._report(e, "key");
+      }
     }
     async tapKey(keyCode, metaState = 0) {
       await this.key(AndroidKeyEventAction.Down, keyCode, metaState);
@@ -14282,8 +14348,14 @@
     const stage = $("stage");
     if (!canvas || !stage) return;
     const fs = !!document.fullscreenElement || !!$("mirror-layout")?.classList.contains("is-fullscreen");
-    let nw = Number(canvas.width) || Number(canvas.videoWidth) || 0;
-    let nh = Number(canvas.height) || Number(canvas.videoHeight) || 0;
+    let liveSize = null;
+    try {
+      liveSize = mirror._size;
+    } catch {
+      liveSize = null;
+    }
+    let nw = Number(liveSize?.width) || Number(canvas.width) || Number(canvas.videoWidth) || 0;
+    let nh = Number(liveSize?.height) || Number(canvas.height) || Number(canvas.videoHeight) || 0;
     if (!nw || !nh) {
       const res = ($("stat-res")?.textContent || "").match(/(\d+)\s*[x×]\s*(\d+)/i);
       if (res) {
@@ -14299,14 +14371,15 @@
     const cs = getComputedStyle(stage);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
     const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const GAP = 4;
     let maxW, maxH;
     if (fs) {
-      maxW = window.innerWidth - 100;
+      maxW = window.innerWidth - GAP * 2;
       maxH = window.innerHeight - padY;
     } else {
       const rect = stage.getBoundingClientRect();
-      maxW = Math.max(120, rect.width - padX - 8);
-      maxH = Math.max(120, rect.height - padY - 8);
+      maxW = Math.max(120, rect.width - padX - GAP * 2);
+      maxH = Math.max(120, rect.height - padY - GAP * 2);
     }
     let dw = maxW;
     let dh = dw / ratio;
@@ -14432,30 +14505,42 @@
       toast("\u6307\u4EE4\u5931\u8D25", String(e?.message || e));
     });
   }
+  var _globalRelease = null;
+  var _globalVis = null;
   function bindControl(controller, canvas) {
     ctrl = controller;
     if (!canvas) return;
+    controller.releaseAllPointers().catch(() => {
+    });
     const pos = (e) => controller.toDevice(e.clientX, e.clientY, canvas);
-    canvas.addEventListener("pointerdown", async (e) => {
+    const safe = (fn) => (e) => {
+      Promise.resolve(fn(e)).catch((err) => {
+        logLine("error", "\u89E6\u63A7\u4E8B\u4EF6\u5931\u8D25 " + String(err?.message || err));
+      });
+    };
+    canvas.addEventListener("pointerdown", safe(async (e) => {
       e.preventDefault();
-      canvas.setPointerCapture?.(e.pointerId);
+      try {
+        canvas.setPointerCapture?.(e.pointerId);
+      } catch {
+      }
       const { x, y } = pos(e);
       await controller.pointerDown(e.pointerId, x, y);
-    });
-    canvas.addEventListener("pointermove", async (e) => {
+    }));
+    canvas.addEventListener("pointermove", safe(async (e) => {
       if (!controller.active.has(e.pointerId)) return;
       e.preventDefault();
       const { x, y } = pos(e);
       await controller.pointerMove(e.pointerId, x, y);
-    });
-    const up = (e) => controller.pointerUp(e.pointerId);
+    }));
+    const up = safe((e) => controller.pointerUp(e.pointerId));
     canvas.addEventListener("pointerup", up);
-    canvas.addEventListener("pointercancel", (e) => controller.pointerCancel(e.pointerId));
+    canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)));
     canvas.addEventListener("lostpointercapture", up);
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     canvas.addEventListener(
       "wheel",
-      async (e) => {
+      safe(async (e) => {
         e.preventDefault();
         const { x, y } = pos(e);
         await controller.scroll(
@@ -14464,9 +14549,22 @@
           Math.max(-1, Math.min(1, -e.deltaX / 320)),
           Math.max(-1, Math.min(1, -e.deltaY / 320))
         );
-      },
+      }),
       { passive: false }
     );
+    if (_globalRelease) {
+      window.removeEventListener("blur", _globalRelease);
+      document.removeEventListener("pointercancel", _globalRelease);
+    }
+    if (_globalVis) document.removeEventListener("visibilitychange", _globalVis);
+    _globalRelease = () => controller.releaseAllPointers().catch(() => {
+    });
+    _globalVis = () => {
+      if (document.hidden) _globalRelease();
+    };
+    window.addEventListener("blur", _globalRelease);
+    document.addEventListener("pointercancel", _globalRelease);
+    document.addEventListener("visibilitychange", _globalVis);
     fitCanvas();
   }
   var mirror = new AdbMirror({
@@ -14489,6 +14587,7 @@
       }
       if (text === "\u5DF2\u65AD\u5F00" || text === "\u6295\u5C4F\u5DF2\u7ED3\u675F") {
         document.body.classList.remove("mirroring");
+        ctrl = null;
         setStepsDone(0);
         if ($("placeholder")) {
           $("placeholder").style.display = "flex";
@@ -14532,6 +14631,9 @@
       logLine("ok", "\u9996\u5E27\u5DF2\u6E32\u67D3");
     },
     onController(controller, canvas) {
+      controller.onError = (err, where) => {
+        logLine("error", "\u63A7\u5236\u6307\u4EE4 " + where + " \u5931\u8D25: " + String(err?.message || err));
+      };
       bindControl(controller, canvas);
     },
     onLog: (msg) => logLine("log", String(msg))
