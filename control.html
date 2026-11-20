@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>scrcpy 便捷网页版 · 监视器 v4.2.6</title>
+    <title>scrcpy 便捷网页版 · 监视器 v4.2.7</title>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" type="image/x-icon" href="./assets/custom-icon.ico" />
-    <link rel="stylesheet" href="./css/app.css?v=4.2.6-ui1" />
+    <link rel="stylesheet" href="./css/app.css?v=4.2.7-ui1" />
   </head>
   <body>
     <div class="app" id="app">
@@ -97,7 +97,15 @@
           <button class="rail-btn is-danger is-stop-server" id="btn-stop-server" type="button" title="停止本地服务并关闭页面" aria-label="停止服务">
             <svg viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M7.5 6.5a8 8 0 1 0 9 0"/></svg><small>停止服务</small>
           </button>
+          <button class="rail-btn" id="btn-rail-collapse" type="button" aria-label="折叠侧边栏" title="折叠侧边栏 (O)">
+            <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/><path d="M20 5v14"/></svg><small>折叠</small>
+          </button>
         </nav>
+
+        <!-- 折叠后的展开把手 -->
+        <button class="rail-expand" id="btn-rail-expand" type="button" aria-label="展开侧边栏" title="展开侧边栏 (O)">
+          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/><path d="M4 5v14"/></svg>
+        </button>
 
         <!-- ===== 悬浮连接与画质抽屉 ===== -->
         <div class="side-left" id="side-left">
@@ -442,7 +450,7 @@
     </div>
 
     <div class="toast-root" id="toast-root"></div>
-    <script src="./js/mirror.bundle.js?v=4.2.6-ui1"></script>
+    <script src="./js/mirror.bundle.js?v=4.2.7-ui1"></script>
     <script>
       (() => {
         const app = document.getElementById("app");
@@ -486,8 +494,13 @@
         drawerButtons.forEach((button) => button.addEventListener("click", () => toggleDrawer(button.dataset.drawer)));
         drawers.filter((drawer) => drawer.classList.contains("is-open")).forEach(dockToDrawer);
 
+        const closeDrawers = () => {
+          drawers.forEach((drawer) => drawer.classList.remove("is-open"));
+          syncDrawerButtons();
+        };
         const setFocus = (on) => {
           const focused = typeof on === "boolean" ? on : !app.classList.contains("focus-mode");
+          if (focused) closeDrawers();
           app.classList.toggle("focus-mode", focused);
           focusButton.setAttribute("aria-pressed", String(focused));
           focusHint.classList.toggle("show", focused);
@@ -507,7 +520,7 @@
         const skinButtons = Array.from(document.querySelectorAll("[data-skin]"));
         const sidebarButtons = Array.from(document.querySelectorAll("[data-sidebar]"));
         const appearanceKey = "scrcpy-monitor-appearance-v1";
-        const appearanceDefaults = { theme: "warm", accent: "#d8b37a", bg: "#080a0c", sidebar: "left" };
+        const appearanceDefaults = { theme: "warm", accent: "#d8b37a", bg: "#080a0c", sidebar: "left", railCollapsed: false };
         const appearanceThemes = {
           warm: { accent: "#d8b37a", bg: "#080a0c" },
           mint: { accent: "#79c9b6", bg: "#07100f" },
@@ -538,7 +551,8 @@
           const bg = validColor(next.bg, appearance.bg || appearanceDefaults.bg);
           const sidebar = (next.sidebar || appearance.sidebar) === "right" ? "right" : "left";
           const theme = typeof next.theme === "string" ? next.theme : appearance.theme;
-          appearance = { theme, accent, bg, sidebar };
+          const railCollapsed = next.railCollapsed !== undefined ? !!next.railCollapsed : !!appearance.railCollapsed;
+          appearance = { theme, accent, bg, sidebar, railCollapsed };
 
           root.style.setProperty("--accent", accent);
           root.style.setProperty("--accent-strong", mixHex(accent, "#ffffff", 0.28));
@@ -549,6 +563,7 @@
           root.style.setProperty("--panel-2", mixHex(bg, "#ffffff", 0.1));
           root.style.setProperty("--panel-glass", rgbaHex(mixHex(bg, "#ffffff", 0.025), 0.88));
           app.classList.toggle("sidebar-right", sidebar === "right");
+          app.classList.toggle("rail-collapsed", railCollapsed);
 
           skinAccent.value = accent;
           skinBg.value = bg;
@@ -572,6 +587,12 @@
         skinAccent.addEventListener("input", () => applyAppearance({ ...appearance, accent: skinAccent.value, theme: "custom" }));
         skinBg.addEventListener("input", () => applyAppearance({ ...appearance, bg: skinBg.value, theme: "custom" }));
         sidebarButtons.forEach((button) => button.addEventListener("click", () => applyAppearance({ ...appearance, sidebar: button.dataset.sidebar })));
+        const setRailCollapsed = (collapsed) => {
+          if (collapsed) closeDrawers();
+          applyAppearance({ ...appearance, railCollapsed: collapsed });
+        };
+        document.getElementById("btn-rail-collapse").addEventListener("click", () => setRailCollapsed(true));
+        document.getElementById("btn-rail-expand").addEventListener("click", () => setRailCollapsed(false));
         document.getElementById("skin-reset").addEventListener("click", () => applyAppearance({ ...appearanceDefaults }));
         applyAppearance(appearance, false);
 
@@ -595,11 +616,14 @@
           if (key === "i" || key === "v") {
             event.preventDefault();
             setFocus();
+          } else if (key === "o") {
+            event.preventDefault();
+            setRailCollapsed(!appearance.railCollapsed);
           }
         });
 
         if ("ResizeObserver" in window) new ResizeObserver(refreshCanvas).observe(stage);
-        toggleDrawer("connect");
+        if (!appearance.railCollapsed) toggleDrawer("connect");
       })();
     </script>
   </body>

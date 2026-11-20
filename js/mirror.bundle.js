@@ -16126,10 +16126,20 @@
     if (box) box.hidden = true;
     $("stage")?.classList.remove("is-offline");
   }
+  function closeDrawers() {
+    document.querySelectorAll(".drawer.is-open").forEach((d) => d.classList.remove("is-open"));
+    const app = $("app");
+    if (app) app.classList.remove("drawer-open", "panel-wide");
+    document.querySelectorAll("[data-drawer]").forEach((btn) => {
+      btn.classList.remove("is-active");
+      btn.setAttribute("aria-expanded", "false");
+    });
+  }
   async function toggleFullscreen() {
     const root = $("mirror-layout");
     if (!root) return;
     if (!document.fullscreenElement) {
+      closeDrawers();
       await root.requestFullscreen?.();
       root.classList.add("is-fullscreen");
       setFsButtonLabel(true);

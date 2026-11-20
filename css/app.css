@@ -279,6 +279,26 @@ select.input { appearance: none; padding-right: 26px; background-image: linear-g
 .fs-text textarea { width: 100%; resize: none; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-2); color: var(--ink); font: 12px/1.5 var(--sans); }
 .fs-float .stop { width: calc(100% - 16px); margin: 0 8px 8px; padding: 7px; border: 1px solid rgba(238,107,110,.35); border-radius: 6px; background: rgba(238,107,110,.08); color: var(--danger); cursor: pointer; }
 
+/* ===== 侧边栏折叠 ===== */
+.rail-expand { position: absolute; z-index: 40; top: 12px; left: 12px; width: 28px; height: 56px; display: none; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 10px; background: rgba(13,16,20,.88); color: var(--ink-2); cursor: pointer; backdrop-filter: blur(18px); }
+.rail-expand svg { width: 16px; height: 16px; }
+.rail-expand:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.app.sidebar-right .rail-expand { left: auto; right: 12px; }
+.app.sidebar-right .rail-expand svg { transform: scaleX(-1); }
+
+/* 折叠：左栏收起，舞台铺满左侧 */
+.app.rail-collapsed .rail { left: 0; width: 0; padding: 0; border: none; opacity: 0; pointer-events: none; overflow: hidden; }
+.app.rail-collapsed .stage { left: 12px; right: 12px; }
+/* 折叠：右栏收起，舞台铺满右侧 */
+.app.sidebar-right.rail-collapsed .rail { right: 0; left: auto; width: 0; padding: 0; border: none; opacity: 0; pointer-events: none; overflow: hidden; }
+.app.sidebar-right.rail-collapsed .stage { right: 12px; left: 12px; }
+/* 折叠态即使抽屉类残留也不让出抽屉宽度 */
+.app.rail-collapsed.drawer-open .stage,
+.app.sidebar-right.rail-collapsed.drawer-open .stage { left: 12px; right: 12px; }
+.app.rail-collapsed .rail-expand { display: flex; }
+/* 折叠按钮图标在右栏镜像 */
+.app.sidebar-right #btn-rail-collapse svg { transform: scaleX(-1); }
+
 /* 沉浸模式 */
 .focus-exit { position: absolute; z-index: 70; top: 16px; right: 16px; display: none; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: rgba(13,16,20,.72); color: var(--ink-2); font-size: 11px; cursor: pointer; opacity: .42; backdrop-filter: blur(12px); }
 .focus-exit:hover { opacity: 1; }
@@ -567,4 +587,29 @@ body { font-size: 14px; }
 .scope-btn.active { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); font-weight: 550; }
 
+/* ===== 沉浸 / 全屏舞台铺满：特异性压过侧栏左右、抽屉、宽面板等所有预留规则，
+   避免侧栏所在一侧仍残留 88px / 388px / 686px 的预留空档。 ===== */
+.app.focus-mode .mirror-layout .stage,
+.app.focus-mode.drawer-open .mirror-layout .stage,
+.app.focus-mode.sidebar-right .mirror-layout .stage,
+.app.focus-mode.sidebar-right.drawer-open .mirror-layout .stage,
+.app.focus-mode.drawer-open.panel-wide .mirror-layout .stage,
+.app.focus-mode.sidebar-right.drawer-open.panel-wide .mirror-layout .stage {
+  inset: 0;
+  padding: 0;
+}
+.app .mirror-layout:fullscreen .stage,
+.app .mirror-layout.is-fullscreen .stage,
+.app.drawer-open .mirror-layout.is-fullscreen .stage,
+.app.sidebar-right.drawer-open .mirror-layout.is-fullscreen .stage,
+.app.drawer-open.panel-wide .mirror-layout.is-fullscreen .stage,
+.app.sidebar-right.drawer-open.panel-wide .mirror-layout.is-fullscreen .stage {
+  inset: 0;
+}
+
+/* 折叠态下即便抽屉打开，也不得给 rail 恢复边框/宽度，消除右栏 1px 残留 */
+.app.rail-collapsed.drawer-open .rail,
+.app.sidebar-right.rail-collapsed.drawer-open .rail {
+  width: 0; padding: 0; border: none; opacity: 0; pointer-events: none; overflow: hidden;
+}
 
