@@ -16046,8 +16046,9 @@
     el.innerHTML = '<div class="toast-body"><p class="toast-title"></p>' + (description ? '<p class="toast-desc"></p>' : "") + (opts.html || "") + "</div>";
     el.querySelector(".toast-title").textContent = title;
     if (description) el.querySelector(".toast-desc").textContent = description;
+    while (root.children.length >= 3) root.firstElementChild?.remove();
     root.appendChild(el);
-    const ttl = opts.duration || 8e3;
+    const ttl = opts.duration || 4500;
     if (ttl > 0) setTimeout(() => el.remove(), ttl);
   }
   function shotToast(result) {
@@ -16245,6 +16246,8 @@
     logLine("info", "USB \u72EC\u5360\u4FDD\u62A4\u5DF2\u542F\u52A8\uFF082 \u79D2\u63A2\u6D4B\uFF0C\u4E0D\u4E3B\u52A8\u62C9\u8D77 ADB\uFF09");
   }
   var ctrl = null;
+  var _canvasAbort = null;
+  var _keyboardAbort = null;
   var mode = "usb";
   var wifiKeepAlive = null;
   var usbManualStop = false;
@@ -16322,6 +16325,21 @@
     if (span) span.textContent = label;
     const fsLbl = $("btn-fs-fullscreen")?.querySelector(".lbl3");
     if (fsLbl) fsLbl.textContent = label;
+  }
+  function releaseCanvasInputs() {
+    _canvasAbort?.abort();
+    _canvasAbort = null;
+    _keyboardAbort?.abort();
+    _keyboardAbort = null;
+    if (_globalRelease) {
+      window.removeEventListener("blur", _globalRelease);
+      document.removeEventListener("pointercancel", _globalRelease);
+      _globalRelease = null;
+    }
+    if (_globalVis) {
+      document.removeEventListener("visibilitychange", _globalVis);
+      _globalVis = null;
+    }
   }
   function fitCanvas() {
     const canvas = document.querySelector("#stage canvas");
@@ -16490,6 +16508,9 @@
   function bindKeyboardSink(controller, canvas) {
     const sink = $("key-sink");
     if (!sink) return;
+    _keyboardAbort?.abort();
+    _keyboardAbort = new AbortController();
+    const signal = _keyboardAbort.signal;
     canvas.addEventListener(
       "pointerdown",
       () => {
@@ -16500,12 +16521,19 @@
           }
         }, 0);
       },
-      { passive: true }
+      { passive: true, signal }
     );
     let buf = "";
     let timer = null;
     let composing = false;
     let skipInput = "";
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      timer = null;
+      buf = "";
+      composing = false;
+      skipInput = "";
+    }, { once: true });
     const flush = () => {
       const text = buf;
       buf = "";
@@ -16528,7 +16556,7 @@
     sink.addEventListener("compositionstart", () => {
       composing = true;
       clearTimeout(timer);
-    });
+    }, { signal });
     sink.addEventListener("compositionend", (e) => {
       composing = false;
       const text = e.data || "";
@@ -16537,7 +16565,7 @@
         skipInput = text;
         sendTypedText(text).catch((err) => logLine("error", "IME \u4E0A\u5C4F\u5931\u8D25 " + String(err?.message || err)));
       }
-    });
+    }, { signal });
     sink.addEventListener("input", (e) => {
       if (composing || e.isComposing) return;
       const text = sink.value || "";
@@ -16548,7 +16576,7 @@
         return;
       }
       sendTypedText(text).catch((err) => logLine("error", "\u8F93\u5165\u5931\u8D25 " + String(err?.message || err)));
-    });
+    }, { signal });
     sink.addEventListener("keydown", async (e) => {
       if (e.isComposing || composing) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
@@ -16594,11 +16622,14 @@
       } catch (err) {
         logLine("error", "\u6309\u952E\u5931\u8D25 " + e.key + " " + String(err?.message || err));
       }
-    });
+    }, { signal });
   }
   function bindControl(controller, canvas) {
     ctrl = controller;
     if (!canvas) return;
+    releaseCanvasInputs();
+    _canvasAbort = new AbortController();
+    const signal = _canvasAbort.signal;
     controller.releaseAllPointers().catch(() => {
     });
     const pos = (e) => controller.toDevice(e.clientX, e.clientY, canvas);
@@ -16615,18 +16646,18 @@
       }
       const { x, y } = pos(e);
       await controller.pointerDown(e.pointerId, x, y);
-    }));
+    }), { signal });
     canvas.addEventListener("pointermove", safe(async (e) => {
       if (!controller.active.has(e.pointerId)) return;
       e.preventDefault();
       const { x, y } = pos(e);
       await controller.pointerMove(e.pointerId, x, y);
-    }));
+    }), { signal });
     const up = safe((e) => controller.pointerUp(e.pointerId));
-    canvas.addEventListener("pointerup", up);
-    canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)));
-    canvas.addEventListener("lostpointercapture", up);
-    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("pointerup", up, { signal });
+    canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)), { signal });
+    canvas.addEventListener("lostpointercapture", up, { signal });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault(), { signal });
     canvas.addEventListener(
       "wheel",
       safe(async (e) => {
@@ -16639,7 +16670,7 @@
           Math.max(-1, Math.min(1, -e.deltaY / 320))
         );
       }),
-      { passive: false }
+      { passive: false, signal }
     );
     if (_globalRelease) {
       window.removeEventListener("blur", _globalRelease);
@@ -16699,6 +16730,7 @@
         clearTimeout(usbStableTimer);
         document.body.classList.remove("mirroring");
         ctrl = null;
+        releaseCanvasInputs();
         if (textInput) {
           textInput.restore().catch(() => {
           });
@@ -17458,9 +17490,10 @@
       if (!st.installed) throw new Error("\u63D2\u4EF6\u5B89\u88C5\u540E\u4ECD\u672A\u68C0\u6D4B\u5230\uFF0C\u8BF7\u91CD\u8BD5");
     }
     if (!st.enabled) await textInput.enable();
+    const wasActive = !!st.active;
     await textInput.activate();
     await refreshImeStatus();
-    if (textInput.active) {
+    if (!wasActive && textInput.active) {
       toast("\u4E2D\u6587\u8F93\u5165\u5DF2\u5C31\u7EEA", "\u624B\u673A\u5DF2\u5207\u5230 ADB \u8F93\u5165\u6CD5\uFF1B\u4E0D\u7528\u65F6\u70B9\u300C\u6062\u590D\u624B\u673A\u8F93\u5165\u6CD5\u300D");
     }
     return true;

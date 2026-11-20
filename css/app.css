@@ -308,11 +308,11 @@ select.input { appearance: none; padding-right: 26px; background-image: linear-g
 .guide-body li { margin: 4px 0; font-size: 12px; line-height: 1.7; }
 .guide-body b { color: var(--ink); }
 kbd { padding: 1px 5px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-2); color: var(--ink); font: 10px var(--mono); }
-.toast-root { position: fixed; z-index: 120; top: 18px; right: 18px; display: flex; max-width: 350px; flex-direction: column; gap: 8px; }
-.toast { padding: 11px 13px; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 9px; background: rgba(24,29,36,.96); box-shadow: 0 12px 36px rgba(0,0,0,.25); animation: toast-in .18s ease-out; }
-@keyframes toast-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
-.toast-title { margin: 0; font-size: 13px; }
-.toast-desc { margin: 4px 0 0; color: var(--ink-2); font-size: 12px; white-space: pre-wrap; }
+.toast-root { position: fixed; z-index: 120; top: 14px; right: 14px; display: flex; width: min(280px, calc(100vw - 24px)); flex-direction: column; gap: 6px; }
+.toast { padding: 8px 10px; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(24,29,36,.96); box-shadow: 0 8px 24px rgba(0,0,0,.2); animation: toast-in .18s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+.toast-title { margin: 0; font-size: 12px; }
+.toast-desc { margin: 3px 0 0; color: var(--ink-2); font-size: 11px; line-height: 1.55; white-space: pre-wrap; }
 .shot-thumb { display: block; max-width: 120px; margin-top: 8px; border-radius: 6px; }
 .shot-actions { margin-top: 8px; }
 .xs-btn { padding: 3px 10px; font-size: 11px; }
@@ -397,8 +397,8 @@ body { font-size: 14px; }
 .focus-exit kbd, kbd { font-size: 11px; }
 .guide-body h3 { font-size: 14px; }
 .guide-body li { font-size: 13px; }
-.toast-title { font-size: 14px; }
-.toast-desc { font-size: 13px; }
+.toast-title { font-size: 12px; }
+.toast-desc { font-size: 11px; }
 .ph-sub { font-size: 14px; }
 
 /* 展开的抽屉与工具轨组成一体式侧栏 */
@@ -464,7 +464,7 @@ body { font-size: 14px; }
   .mode-desc { font-size: 10px; }
   .guide-mask { padding: 10px; }
   .guide-body { padding-right: 13px; padding-left: 13px; }
-  .toast-root { right: 10px; left: 10px; max-width: none; }
+  .toast-root { right: 10px; left: 10px; width: auto; max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

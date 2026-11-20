@@ -92,8 +92,9 @@ function toast(title, description = "", opts = {}) {
     "</div>";
   el.querySelector(".toast-title").textContent = title;
   if (description) el.querySelector(".toast-desc").textContent = description;
+  while (root.children.length >= 3) root.firstElementChild?.remove();
   root.appendChild(el);
-  const ttl = opts.duration || 8000;
+  const ttl = opts.duration || 4500;
   if (ttl > 0) setTimeout(() => el.remove(), ttl);
 }
 
@@ -313,6 +314,8 @@ function startUsbGuard() {
 }
 
 let ctrl = null;
+let _canvasAbort = null;
+let _keyboardAbort = null;
 let mode = "usb";
 let wifiKeepAlive = null;
 let usbManualStop = false;
@@ -399,6 +402,23 @@ function setFsButtonLabel(onFs) {
   if (span) span.textContent = label;
   const fsLbl = $("btn-fs-fullscreen")?.querySelector(".lbl3");
   if (fsLbl) fsLbl.textContent = label;
+}
+
+/* 断线与重连前先解绑画布/键盘监听，避免同一个指针或一次输入被多轮闭包重复处理。 */
+function releaseCanvasInputs() {
+  _canvasAbort?.abort();
+  _canvasAbort = null;
+  _keyboardAbort?.abort();
+  _keyboardAbort = null;
+  if (_globalRelease) {
+    window.removeEventListener("blur", _globalRelease);
+    document.removeEventListener("pointercancel", _globalRelease);
+    _globalRelease = null;
+  }
+  if (_globalVis) {
+    document.removeEventListener("visibilitychange", _globalVis);
+    _globalVis = null;
+  }
 }
 
 function fitCanvas() {
@@ -591,6 +611,9 @@ let _globalVis = null;
 function bindKeyboardSink(controller, canvas) {
   const sink = $("key-sink");
   if (!sink) return;
+  _keyboardAbort?.abort();
+  _keyboardAbort = new AbortController();
+  const signal = _keyboardAbort.signal;
 
   // 点画面时把焦点交给透明输入槽，后续按键才会进到这里
   canvas.addEventListener(
@@ -605,13 +628,20 @@ function bindKeyboardSink(controller, canvas) {
         }
       }, 0);
     },
-    { passive: true }
+    { passive: true, signal }
   );
 
   let buf = "";
   let timer = null;
   let composing = false;
   let skipInput = "";
+  signal.addEventListener("abort", () => {
+    clearTimeout(timer);
+    timer = null;
+    buf = "";
+    composing = false;
+    skipInput = "";
+  }, { once: true });
 
   const flush = () => {
     const text = buf;
@@ -637,7 +667,7 @@ function bindKeyboardSink(controller, canvas) {
   sink.addEventListener("compositionstart", () => {
     composing = true;
     clearTimeout(timer);
-  });
+  }, { signal });
 
   sink.addEventListener("compositionend", (e) => {
     composing = false;
@@ -647,7 +677,7 @@ function bindKeyboardSink(controller, canvas) {
       skipInput = text;
       sendTypedText(text).catch((err) => logLine("error", "IME 上屏失败 " + String(err?.message || err)));
     }
-  });
+  }, { signal });
 
   // insertText / 语音输入等不经过 keydown 的路径
   sink.addEventListener("input", (e) => {
@@ -660,7 +690,7 @@ function bindKeyboardSink(controller, canvas) {
       return;
     }
     sendTypedText(text).catch((err) => logLine("error", "输入失败 " + String(err?.message || err)));
-  });
+  }, { signal });
 
   sink.addEventListener("keydown", async (e) => {
     if (e.isComposing || composing) return;
@@ -711,12 +741,15 @@ function bindKeyboardSink(controller, canvas) {
     } catch (err) {
       logLine("error", "按键失败 " + e.key + " " + String(err?.message || err));
     }
-  });
+  }, { signal });
 }
 
 function bindControl(controller, canvas) {
   ctrl = controller;
   if (!canvas) return;
+  releaseCanvasInputs();
+  _canvasAbort = new AbortController();
+  const signal = _canvasAbort.signal;
 
   // 重新绑定前释放上一轮残留按压，避免旧指针态卡在设备端
   controller.releaseAllPointers().catch(() => {});
@@ -734,18 +767,18 @@ function bindControl(controller, canvas) {
     try { canvas.setPointerCapture?.(e.pointerId); } catch { /* 捕获失败不阻断 */ }
     const { x, y } = pos(e);
     await controller.pointerDown(e.pointerId, x, y);
-  }));
+  }), { signal });
   canvas.addEventListener("pointermove", safe(async (e) => {
     if (!controller.active.has(e.pointerId)) return;
     e.preventDefault();
     const { x, y } = pos(e);
     await controller.pointerMove(e.pointerId, x, y);
-  }));
+  }), { signal });
   const up = safe((e) => controller.pointerUp(e.pointerId));
-  canvas.addEventListener("pointerup", up);
-  canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)));
-  canvas.addEventListener("lostpointercapture", up);
-  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  canvas.addEventListener("pointerup", up, { signal });
+  canvas.addEventListener("pointercancel", safe((e) => controller.pointerCancel(e.pointerId)), { signal });
+  canvas.addEventListener("lostpointercapture", up, { signal });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault(), { signal });
   canvas.addEventListener(
     "wheel",
     safe(async (e) => {
@@ -758,7 +791,7 @@ function bindControl(controller, canvas) {
         Math.max(-1, Math.min(1, -e.deltaY / 320))
       );
     }),
-    { passive: false }
+    { passive: false, signal }
   );
 
   // 全局兜底：窗口失焦 / 指针在画面外被取消 / 页面切到后台时，释放所有按压。
@@ -821,6 +854,7 @@ const mirror = new AdbMirror({
       clearTimeout(usbStableTimer);
       document.body.classList.remove("mirroring");
       ctrl = null;
+      releaseCanvasInputs();
       if (textInput) {
         textInput.restore().catch(() => {});
         textInput = null;
@@ -1692,9 +1726,10 @@ async function ensureChineseInput({ interactive = false } = {}) {
     if (!st.installed) throw new Error("插件安装后仍未检测到，请重试");
   }
   if (!st.enabled) await textInput.enable();
+  const wasActive = !!st.active;
   await textInput.activate();
   await refreshImeStatus();
-  if (textInput.active) {
+  if (!wasActive && textInput.active) {
     toast("中文输入已就绪", "手机已切到 ADB 输入法；不用时点「恢复手机输入法」");
   }
   return true;
