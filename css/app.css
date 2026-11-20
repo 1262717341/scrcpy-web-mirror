@@ -462,3 +462,109 @@ body { font-size: 14px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ===== v4.0.16 应用管理 / 文件管理 ===== */
+.head-tools { display: flex; gap: 6px; align-items: center; }
+.list-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.list-filters .input { flex: 1; min-width: 0; }
+.mini-check { display: inline-flex; flex: none; align-items: center; gap: 5px; color: var(--ink-2); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.mini-check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.list-status { margin: 0 0 8px; color: var(--ink-3); font-size: 11px; line-height: 1.6; }
+.dev-list { display: flex; flex-direction: column; gap: 6px; }
+.dev-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.dev-row:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--accent) 5%, var(--panel-2)); }
+.dev-avatar { display: grid; flex: none; width: 26px; height: 26px; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font: 600 11px/1 var(--mono); text-transform: uppercase; }
+.dev-avatar img { width: 18px; height: 18px; opacity: .9; }
+.dev-main { min-width: 0; flex: 1; }
+.dev-name { display: block; margin: 0; overflow: hidden; color: var(--ink); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.dev-name.mono { font-family: var(--mono); font-size: 11.5px; }
+.dev-meta { display: block; margin-top: 1px; overflow: hidden; color: var(--ink-3); font-size: 10px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.dev-actions { display: flex; flex: none; gap: 3px; }
+.mini-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: transparent; color: var(--ink-2); font-size: 10px; cursor: pointer; }
+.mini-btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); }
+.mini-btn.danger:hover { border-color: rgba(238,107,110,.5); color: var(--danger); }
+.mini-btn:disabled { opacity: .45; cursor: default; }
+.file-path-row { display: flex; gap: 5px; align-items: center; margin-bottom: 7px; }
+.file-path-row .input { flex: 1; min-width: 0; }
+.icon-btn { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line-strong); border-radius: 7px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.icon-btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); }
+.icon-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.file-quick { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.file-quick button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--ink-3); font-size: 10px; cursor: pointer; }
+.file-quick button:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); }
+.file-quick button.active { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); }
+.dev-row .dev-avatar svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dev-row.is-dir { cursor: pointer; }
+
+.drawer.is-drop { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent), 0 22px 65px rgba(0,0,0,.42); }
+.drawer.is-drop .drawer-body { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.head-tools .btn { padding: 3px 8px; }
+
+/* v4.0.17 中文输入插件状态行 */
+.ime-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 2px}
+.ime-status{font-size:12px;color:var(--ink2);line-height:1.5}
+.ime-auto{display:flex;margin:2px 0 8px;font-size:12px}
+
+/* v4.0.19 投屏键盘捕获：透明输入槽，只用来接物理键盘与中文输入法 */
+.key-sink{position:absolute;left:50%;top:50%;width:1px;height:1px;padding:0;border:0;outline:none;opacity:0;background:transparent;color:transparent;caret-color:transparent;pointer-events:none;z-index:0}
+
+/* v4.0.20 应用 / 文件面板加宽一倍（仅这两个面板，其它抽屉保持 300px） */
+.app.drawer-open.panel-wide .side-left,
+.app.drawer-open.panel-wide .side-right { width: 600px; }
+.app.drawer-open.panel-wide:not(.sidebar-right) .side-left { left: 76px; }
+.app.drawer-open.panel-wide .side-right { right: 76px; }
+.app.drawer-open.panel-wide .stage { left: 686px; right: 12px; }
+.app.sidebar-right.drawer-open.panel-wide .stage { left: 12px; right: 686px; }
+.app.drawer-open.panel-wide .drawer { border-radius: 0 13px 13px 0; }
+.app.sidebar-right.drawer-open.panel-wide .drawer { border-radius: 13px 0 0 13px; }
+
+@media (max-width: 1120px) {
+  .app.drawer-open.panel-wide .side-left,
+  .app.drawer-open.panel-wide .side-right { width: 480px; }
+  .app.drawer-open.panel-wide .stage { left: 566px; }
+  .app.sidebar-right.drawer-open.panel-wide .stage { right: 566px; }
+}
+
+/* v4.0.20 应用列表：名称主显示 + 图标 */
+.dev-avatar.app-avatar { width: 32px; height: 32px; padding: 2px; overflow: hidden; background: #0c0f13; border: 1px solid var(--line); border-radius: 7px; }
+.dev-avatar.app-avatar img { width: 100%; height: 100%; object-fit: contain; opacity: 1; }
+.dev-avatar.app-avatar span { font-size: 12px; }
+.dev-name.app-name { font-size: 13px; font-weight: 550; line-height: 1.45; }
+.dev-meta.mono { font-family: var(--mono); font-size: 10.5px; }
+
+/* v4.0.21 应用多选与批量操作 */
+.dev-pick { flex: 0 0 20px; width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid #3a414c;
+  border-radius: 6px; background: #14181e; color: transparent; font-size: 13px; font-weight: 700; line-height: 1; }
+.dev-row.is-picked { border-color: rgba(232, 109, 68, .55); background: rgba(232, 109, 68, .08); }
+.dev-row.is-picked .dev-pick { border-color: #e86d44; background: #e86d44; color: #fff; }
+.drawer.is-selecting .dev-actions { display: none; }
+
+/* v4.0.22 顶部常驻批处理条：放在「多选 / 刷新 / 安装 APK」上方，不覆盖列表 */
+.app-batch { position: relative; z-index: 2; display: flex; flex: none; align-items: center; gap: 8px; flex-wrap: nowrap;
+  padding: 7px 10px; background: #171b21; border-bottom: 1px solid #2a303a; border-radius: 12px 12px 0 0; }
+.app-batch[hidden] { display: none; }
+.app-batch-info { display: flex; flex: none; align-items: center; gap: 8px; color: #aab2bf; font-size: 11.5px; white-space: nowrap; }
+.batch-link { border: 0; background: none; color: #9aa3b1; font-size: 11.5px; cursor: pointer; padding: 0 2px; }
+.batch-link:hover { color: #e8ecf1; }
+.batch-link:disabled { opacity: .45; cursor: not-allowed; }
+.app-batch-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; flex: 1; min-width: 0; }
+.batch-btn { flex: none; border: 1px solid #333a45; background: #222831; color: #9fa8b6; border-radius: 7px; padding: 4px 7px;
+  font-size: 11px; line-height: 1.35; cursor: pointer; white-space: nowrap; }
+.batch-btn:hover:not(:disabled) { color: #e8ecf1; border-color: #4a5361; background: #2a313b; }
+.batch-btn:disabled { opacity: .45; cursor: not-allowed; }
+.batch-btn.danger { color: #d7a09a; border-color: #4a3330; }
+.batch-btn.done { background: #e86d44; border-color: #e86d44; color: #fff; font-weight: 600; }
+.batch-btn.done:hover { background: #f07a51; border-color: #f07a51; }
+
+/* v4.0.23 文件面板：批处理条放在标题下方，四周留一点边距 */
+.file-batch { margin: 8px 10px 6px; border: 1px solid #2a303a; border-radius: 10px; }
+
+/* v4.0.22 应用范围：全部 / 第三方 / 系统 */
+.app-scope { display: flex; gap: 5px; margin: 0 0 9px; }
+.scope-btn { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px;
+  background: transparent; color: var(--ink-3); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.scope-btn:hover { border-color: var(--line-strong); color: var(--ink-2); }
+.scope-btn.active { border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); font-weight: 550; }
+
+
