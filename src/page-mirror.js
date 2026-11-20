@@ -254,29 +254,80 @@ function bindSettingsSaver() {
 
 function scheduleUsbReconnect(reason) {
   if (mode !== "usb" || usbManualStop || usbStarting) return;
-  if (!usbConnectedAt || Date.now() - usbConnectedAt > 30000) return;
-  if (usbAutoRetries >= 1) return;
-  usbAutoRetries += 1;
+  const delays = [1500, 2500, 4000, 6500, 10000, 15000];
+  if (usbAutoRetries >= delays.length) {
+    logLine("error", "USB 自动重连已尝试 " + delays.length + " 次仍未恢复，请检查线材、接口占用后点「重新连接」");
+    toast("USB 暂未恢复", "自动重连已暂停，可手动点重新连接");
+    return;
+  }
+  const attempt = ++usbAutoRetries;
+  const delay = delays[attempt - 1];
   clearTimeout(usbRetryTimer);
-  toast("USB 链路中断", "正在自动重连，无需手动点开始");
-  logLine("info", "USB 链路提前中断（" + reason + "），1.5 秒后自动重连 1/1");
+  toast("USB 链路中断", "正在自动重连（" + attempt + "/" + delays.length + "）");
+  logLine("warn", "USB 链路中断（" + reason + "），" + (delay / 1000) + " 秒后自动重连 " + attempt + "/" + delays.length);
   usbRetryTimer = setTimeout(() => {
+    usbRetryTimer = null;
     if (!usbManualStop) startUsb(true, true);
-  }, 1500);
+  }, delay);
+}
+
+// WebUSB 必须独占 Android ADB 接口。运行期间用 Worker 定时检查 5037，
+// 只在外部程序真的拉起 adb server 时调用既有 kill-adb；空跑不会启动 ADB。
+let usbGuardWorker = null;
+let usbGuardFallback = null;
+let usbGuardBusy = false;
+function stopUsbGuard() {
+  if (usbGuardFallback) clearInterval(usbGuardFallback);
+  usbGuardFallback = null;
+  if (usbGuardWorker) {
+    try { usbGuardWorker.postMessage("stop"); usbGuardWorker.terminate(); } catch { /* ignore */ }
+  }
+  usbGuardWorker = null;
+  usbGuardBusy = false;
+}
+async function guardUsbExclusive() {
+  if (usbGuardBusy || mode !== "usb" || (!mirror.running && !usbStarting) || usbManualStop) return;
+  usbGuardBusy = true;
+  try {
+    const response = await fetch("/api/kill-adb", { method: "POST", cache: "no-store" });
+    const result = await response.json();
+    if (result.changed) logLine("warn", "检测到外部 ADB 服务抢占风险，已释放并恢复 WebUSB 独占");
+  } catch {
+    /* 本地服务停止时页面会随之关闭，不在后台刷错误 */
+  } finally {
+    usbGuardBusy = false;
+  }
+}
+function startUsbGuard() {
+  stopUsbGuard();
+  try {
+    const code = "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},2000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
+    const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    usbGuardWorker = new Worker(url);
+    usbGuardWorker.onmessage = () => guardUsbExclusive();
+    usbGuardWorker.postMessage("start");
+  } catch {
+    usbGuardFallback = setInterval(() => guardUsbExclusive(), 2000);
+  }
+  logLine("info", "USB 独占保护已启动（2 秒探测，不主动拉起 ADB）");
 }
 
 let ctrl = null;
 let mode = "usb";
 let wifiKeepAlive = null;
-// v4.2.5：USB 过早掉流的自动恢复状态
 let usbManualStop = false;
 let usbStarting = false;
 let usbConnectedAt = 0;
 let usbAutoRetries = 0;
 let usbRetryTimer = null;
+let usbStableTimer = null;
 
 function setMode(next, silent) {
   mode = next === "wifi" ? "wifi" : "usb";
+  if (mode !== "usb") {
+    stopUsbGuard();
+    clearTimeout(usbStableTimer);
+  }
   all(".mode-card").forEach((b) => {
     b.classList.toggle("active", b.getAttribute("data-mode") === mode);
   });
@@ -745,7 +796,15 @@ const mirror = new AdbMirror({
     document.body.classList.toggle("mirroring", mirroring);
     if (mirroring) {
       usbStarting = false;
-      if (mode === "usb") usbConnectedAt = Date.now();
+      if (mode === "usb") {
+        usbConnectedAt = Date.now();
+        if (!usbGuardWorker && !usbGuardFallback) startUsbGuard();
+        clearTimeout(usbStableTimer);
+        usbStableTimer = setTimeout(() => {
+          usbAutoRetries = 0;
+          logLine("ok", "USB 已连续稳定 60 秒，自动重连计数已重置");
+        }, 60000);
+      }
       setStepsDone(3);
       hideOffline();
       if ($("placeholder")) $("placeholder").style.display = "none";
@@ -758,6 +817,8 @@ const mirror = new AdbMirror({
       }
     }
     if (text === "已断开" || text === "投屏已结束") {
+      stopUsbGuard();
+      clearTimeout(usbStableTimer);
       document.body.classList.remove("mirroring");
       ctrl = null;
       if (textInput) {
@@ -880,6 +941,16 @@ function showFail(err) {
     if ($("placeholder-text")) $("placeholder-text").textContent = msg;
   }
 }
+
+/* WebUSB 库在 close() 取消挂起 transferIn/transferOut 时会产生预期内的拒绝。
+ * 只在已经进入停止/断线收尾时吞掉这类噪声，其它 Promise 错误仍正常上报。 */
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = String(event.reason?.message || event.reason || "");
+  if (!/transferIn|transferOut|transfer was cancelled|device must be opened first/i.test(reason)) return;
+  if (!mirror._stopRequested && !mirror._dropHandled) return;
+  event.preventDefault();
+  logLine("info", "USB 收尾传输已取消（正常关闭）");
+});
 
 /* ---------- 心跳 Worker ----------
  * 看门狗只认「心跳」：页面每 5 秒通过现有 ADB 通道写一次，写进去就证明通道还活着。
@@ -1095,6 +1166,8 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
     usbAutoRetries = 0;
     clearTimeout(usbRetryTimer);
   }
+  stopUsbGuard();
+  clearTimeout(usbStableTimer);
   usbStarting = true;
   usbConnectedAt = 0;
   hideOffline();
@@ -1120,9 +1193,10 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
     // 即使 adb 没在运行，上一次 WebUSB 句柄释放后 Windows 也需要短暂稳定期。
     // 真正停过 adb server 时等待更久，避免 USB 重新枚举把刚建立的链路重置。
     await new Promise((resolve) => setTimeout(resolve, adbReleased ? 3000 : 1500));
+    startUsbGuard();
     logLine("info", "检查已授权 USB 设备…");
     try {
-      await mirror.start(preferSerial, opts);
+      await mirror.start(preferSerial, opts, !autoRetry);
     } catch (err) {
       if (err?.code === "DEVICE_BUSY" && !adbReleased) {
         logLine("info", "检测到 adb 在后台抢占了接口，释放后重试");
@@ -1134,7 +1208,7 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
           /* ignore */
         }
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        await mirror.start(preferSerial, opts);
+        await mirror.start(preferSerial, opts, !autoRetry);
       } else {
         throw err;
       }
@@ -1145,7 +1219,11 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
     toast("USB 连接成功");
     logLine("ok", "USB 连接成功");
   } catch (err) {
+    stopUsbGuard();
+    clearTimeout(usbStableTimer);
     showFail(err);
+    usbStarting = false;
+    if (autoRetry && !usbManualStop) scheduleUsbReconnect("重连失败：" + String(err?.message || err));
   } finally {
     usbStarting = false;
     if ($("btn-start")) $("btn-start").disabled = false;
@@ -1333,6 +1411,8 @@ on("btn-wifi-disconnect", "click", disconnectWifi);
 on("btn-stop", "click", async () => {
   usbManualStop = true;
   clearTimeout(usbRetryTimer);
+  clearTimeout(usbStableTimer);
+  stopUsbGuard();
   stopWifiKeepAlive();
   await mirror.stop();
   hideOffline();
@@ -1946,6 +2026,10 @@ window.addEventListener("resize", fitCanvas);
 window.addEventListener("beforeunload", saveSettings);
 // 关闭/刷新页面时释放手机端音频占用，避免手机一直没声音
 window.addEventListener("pagehide", () => {
+  usbManualStop = true;
+  clearTimeout(usbRetryTimer);
+  clearTimeout(usbStableTimer);
+  stopUsbGuard();
   try {
     textInput?.restore();
   } catch {

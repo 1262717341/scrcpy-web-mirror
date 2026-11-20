@@ -256,6 +256,27 @@ export class AdbMirror {
     // 这里在投屏期间临时把系统息屏时间拉到最大，停止/断线时恢复，避免把用户设置改坏。
     this._awakeSaved = null;
     this._awakeApplied = false;
+    this._dropHandled = false;
+    this._usbDisconnectHandler = null;
+  }
+
+  _detachUsbDisconnect() {
+    if (typeof navigator === "undefined" || !navigator.usb || !this._usbDisconnectHandler) return;
+    navigator.usb.removeEventListener("disconnect", this._usbDisconnectHandler);
+    this._usbDisconnectHandler = null;
+  }
+
+  async _closeUsbHandle() {
+    this._detachUsbDisconnect();
+    const device = this.device;
+    this.device = null;
+    this._usbServerUploaded = "";
+    if (!device?.raw?.opened) return;
+    try {
+      await device.raw.close();
+    } catch {
+      /* 设备已被系统移除或句柄已关闭 */
+    }
   }
 
   /** 息屏时间快照的本地键：按设备序列号区分，页面被关闭后下次连接仍能补恢复 */
@@ -349,7 +370,7 @@ export class AdbMirror {
     return await this.requestDevice();
   }
 
-  async requestDevice(preferSerial) {
+  async requestDevice(preferSerial, allowPicker = true, waitMs = 0) {
     if (!isUsbSupported()) {
       throw new MirrorError("当前浏览器不支持 WebUSB", "NO_WEBUSB");
     }
@@ -358,28 +379,37 @@ export class AdbMirror {
       throw new MirrorError("WebUSB 设备管理器不可用", "NO_MANAGER");
     }
 
-    // 1) 已授权设备直接用
-    try {
-      const existing = await manager.getDevices();
-      if (existing?.length) {
-        const hit = preferSerial
-          ? existing.find(
-              (d) =>
-                d.serial === preferSerial ||
-                d.name === preferSerial ||
-                `${d.raw?.vendorId?.toString(16)}x${d.raw?.productId?.toString(16)}` === preferSerial
-            )
-          : existing[0];
-        if (hit) {
-          this.device = hit;
-          return hit;
+    // 已授权设备优先。USB 重新枚举期间设备会短暂消失，自动重连只轮询等待，
+    // 绝不能掉进系统选择器（后台 / headless 下选择器无法操作，会表现为一直卡住）。
+    const deadline = Date.now() + Math.max(0, waitMs);
+    for (;;) {
+      try {
+        const existing = await manager.getDevices();
+        if (existing?.length) {
+          const hit = preferSerial
+            ? existing.find(
+                (d) =>
+                  d.serial === preferSerial ||
+                  d.name === preferSerial ||
+                  `${d.raw?.vendorId?.toString(16)}x${d.raw?.productId?.toString(16)}` === preferSerial
+              )
+            : existing[0];
+          if (hit) {
+            this.device = hit;
+            return hit;
+          }
         }
+      } catch {
+        /* 继续等待或回退到用户手动选择 */
       }
-    } catch {
-      /* fall through */
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (!allowPicker) {
+      throw new MirrorError("已授权 USB 设备尚未重新上线", "NO_DEVICE");
     }
 
-    // 2) 弹窗选择（默认 ADB 接口过滤）
+    // 只有用户主动发起连接时才允许弹系统选择器。
     let device;
     try {
       device = await manager.requestDevice();
@@ -424,7 +454,7 @@ export class AdbMirror {
             }
             await new Promise((resolve) => setTimeout(resolve, 900));
             try {
-              await this.requestDevice(this._preferSerial || this.device?.serial || "");
+              await this.requestDevice(this._preferSerial || this.device?.serial || "", false, 5000);
             } catch {
               /* 沿用一个设备对象再试 */
             }
@@ -447,16 +477,23 @@ export class AdbMirror {
     for (let round = 1; round <= 3 && !transport; round += 1) {
       const connection = await acquireConnection();
       this.status("等待设备授权…（请在手机上点「允许 USB 调试」）");
+      let authTimer = null;
       try {
-        transport = await AdbDaemonTransport.authenticate({
-          serial: this.device.serial,
-          connection,
-          credentialStore: this.credentialStore,
-        });
+        transport = await Promise.race([
+          AdbDaemonTransport.authenticate({
+            serial: this.device.serial,
+            connection,
+            credentialStore: this.credentialStore,
+          }),
+          new Promise((_, reject) => {
+            authTimer = setTimeout(() => reject(new Error("ADB authentication timeout")), 15000);
+          }),
+        ]);
       } catch (err) {
         const msg = String(err?.message || err);
+        try { await connection?.close?.(); } catch { /* 连接可能已经断开 */ }
         const transient =
-          /closed unexpectedly|readable ended|ExactReadable|NetworkError|disconnected|connection.*closed/i.test(
+          /closed unexpectedly|readable ended|ExactReadable|NetworkError|disconnected|connection.*closed|timeout/i.test(
             msg
           );
         if (transient && round < 3) {
@@ -469,7 +506,7 @@ export class AdbMirror {
           }
           await new Promise((resolve) => setTimeout(resolve, 1200));
           try {
-            await this.requestDevice(this._preferSerial || this.device?.serial || "");
+            await this.requestDevice(this._preferSerial || this.device?.serial || "", false, 5000);
           } catch {
             /* 沿用一个设备对象再试 */
           }
@@ -486,6 +523,8 @@ export class AdbMirror {
           throw new MirrorError("设备授权被拒绝。请撤销 USB 调试授权后重新连接", "AUTH_REJECTED", err);
         }
         throw new MirrorError("ADB 认证失败：" + msg, "AUTH_FAIL", err);
+      } finally {
+        clearTimeout(authTimer);
       }
     }
     if (!transport) {
@@ -1023,6 +1062,7 @@ export class AdbMirror {
   async handleLinkLost() {
     if (this._stopRequested || !this.running) return;
     this._stopRequested = true;
+    this._dropHandled = true;
     this.running = false;
     this.status("无线链路已断开");
     try {
@@ -1092,10 +1132,11 @@ export class AdbMirror {
 
   /** 非用户主动停止的断线：停止播放 + 释放手机端音频占用 + 清掉舞台画面 */
   async cleanupAfterDrop(reason) {
-    if (this._cleaned) return;
+    if (this._dropHandled || this._cleaned) return;
+    this._dropHandled = true;
     this._cleaned = true;
     this.running = false;
-    this.onLog("连接中断，开始释放手机端音频：" + reason);
+    this.onLog("连接中断原因：" + reason);
     // 断开就该无画面：立即停解码器、移除画布，不留冻住的最后一帧
     this._teardownRenderer();
     try {
@@ -1128,6 +1169,7 @@ export class AdbMirror {
       /* ignore */
     }
     this.adb = null;
+    await this._closeUsbHandle();
     this.deviceController = null;
     this.status("已断开");
   }
@@ -1233,6 +1275,7 @@ export class AdbMirror {
   async startStream() {
     if (!this.adb) throw new MirrorError("ADB 未连接", "NO_ADB");
     this._stopRequested = false;
+    this._dropHandled = false;
     this._cleaned = false;
     // 防御：上一轮会话若还挂着（例如崩溃后直接点重新连接），先关掉再开新的
     if (this.client) {
@@ -1480,7 +1523,7 @@ export class AdbMirror {
         if (!this._stopRequested) {
           console.error("video pipe", err);
           this.onError(err);
-          this.cleanupAfterDrop("视频流中断").catch(() => {});
+          this.cleanupAfterDrop("视频解码管道异常：" + String(err?.message || err)).catch(() => {});
         }
       });
 
@@ -1489,15 +1532,31 @@ export class AdbMirror {
     this.status("投屏中");
     this.onStats(this._stats());
     this.client.exited.then(() => {
-      this.onLog("scrcpy exited stopReq=" + this._stopRequested);
+      this.onLog("scrcpy 控制通道已退出 stopReq=" + this._stopRequested);
       if (!this._stopRequested) {
         this.running = false;
         this.status("投屏已结束");
-        this.cleanupAfterDrop("scrcpy 进程退出").catch(() => {});
+        this.cleanupAfterDrop("scrcpy 控制通道退出").catch(() => {});
       }
     }).catch((e) => {
-      this.onLog("scrcpy exited err " + (e && e.message ? e.message : e));
+      const reason = "scrcpy 控制通道异常：" + String(e?.message || e);
+      this.onLog(reason);
+      if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {});
     });
+    // 不能只盯 decoder.pipeTo 的 reject：ReadableStream 正常 close 时 pipeTo 会 resolve，
+    // 旧逻辑因此漏掉视频/音频通道关闭，表现为冻屏但仍显示「投屏中」。
+    const watchChannel = (stream, channel) => {
+      if (!stream?.closed) return;
+      stream.closed.then(() => {
+        if (!this._stopRequested) this.cleanupAfterDrop(channel + "已关闭").catch(() => {});
+      }).catch((e) => {
+        const reason = channel + "异常：" + String(e?.message || e);
+        this.onLog(reason);
+        if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {});
+      });
+    };
+    watchChannel(this.videoStream, "视频通道");
+    watchChannel(this.audioStream, "音频通道");
   }
 
   _stats() {
@@ -1527,6 +1586,7 @@ export class AdbMirror {
 
   async stop() {
     this._stopRequested = true;
+    this._dropHandled = true;
     this._cleaned = true;
     this.running = false;
     if (this._lateTimer) {
@@ -1571,16 +1631,15 @@ export class AdbMirror {
       /* ignore */
     }
     await this.restoreWirelessAwake();
-    try { await this._wirelessDispose?.(); } catch { /* ignore */ }
-    this._wirelessDispose = null;
-    this.adb = null;
-    // 主动停止后一定要把 WebUSB 句柄也还回去，否则下一次点连接会撞自己造成的 DeviceBusy
     try {
-      if (this.device?.raw?.opened) await this.device.raw.close();
+      await this.adb?.close();
     } catch {
       /* ignore */
     }
-    this.device = null;
+    try { await this._wirelessDispose?.(); } catch { /* ignore */ }
+    this._wirelessDispose = null;
+    this.adb = null;
+    await this._closeUsbHandle();
     this.status("已断开");
     this.onStats({ ...this._stats(), running: false });
   }
@@ -1600,12 +1659,7 @@ export class AdbMirror {
       /* ignore */
     }
     this.adb = null;
-    try {
-      if (this.device?.raw?.opened) await this.device.raw.close();
-    } catch {
-      /* ignore */
-    }
-    this.device = null;
+    await this._closeUsbHandle();
     try {
       await this.audio?.stop();
     } catch {
@@ -1616,7 +1670,7 @@ export class AdbMirror {
   }
 
   /** 一键 USB：选设备 → ADB 认证 → 投屏+控制+声音 */
-  async start(preferSerial, opts) {
+  async start(preferSerial, opts, allowPicker = true) {
     if (this._starting) return;
     this._starting = true;
     try {
@@ -1628,8 +1682,17 @@ export class AdbMirror {
       this._wirelessLastRecv = null;
       this._wirelessServerUploaded = "";
       this._guardSession = "";
-      await this.requestDevice(preferSerial);
+      await this.requestDevice(preferSerial, allowPicker, allowPicker ? 0 : 6000);
       await this.connectAndAuth();
+      if (!this._wirelessTarget && typeof navigator !== "undefined" && navigator.usb) {
+        this._detachUsbDisconnect();
+        this._usbDisconnectHandler = (event) => {
+          if (event.device !== this.device?.raw) return;
+          this.onLog("WebUSB 系统事件：设备连接已移除（" + (this.device?.serial || "未知序列号") + "）");
+          void this.cleanupAfterDrop("Windows/WebUSB 报告设备连接已移除");
+        };
+        navigator.usb.addEventListener("disconnect", this._usbDisconnectHandler);
+      }
       await this.startStream();
     } catch (err) {
       await this._cleanupFailedStart();
