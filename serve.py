@@ -56,7 +56,7 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.2.5"
+APP_VERSION = "4.2.6"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 # v4.2.3：应用名/图标解析的临时文件不再落到用户可见的 /sdcard，改放 shell 可写的临时目录。
@@ -174,6 +174,30 @@ def _cache_dir(serial: str) -> Path:
     return path
 
 
+def _read_local_meta(serial: str, pkg: str) -> dict | None:
+    """读取本机已有缓存的应用名/图标；命中返回响应字典，未命中或损坏返回 None。"""
+    cache = _cache_dir(serial)
+    meta_file = cache / f"{pkg}.json"
+    if not meta_file.is_file():
+        return None
+    try:
+        cached = json.loads(meta_file.read_text("utf-8"))
+    except Exception:
+        return None
+    icon = cached.get("icon") or ""
+    icon_ok = bool(icon and (cache / icon).is_file())
+    if icon and not icon_ok:
+        icon = ""
+    return {
+        "ok": True,
+        "name": cached.get("name") or pkg,
+        "pkg": pkg,
+        "icon": icon_ok,
+        "iconVersion": int(meta_file.stat().st_mtime),
+        "cached": True,
+    }
+
+
 def _adopt_meta_from_other(serial: str, pkg: str) -> dict | None:
     """USB 直连时本机 adb 不能抢接口；从其它设备序列号的缓存里复用同名包的应用名/图标。"""
     target = _cache_dir(serial)
@@ -286,8 +310,12 @@ def app_meta(serial: str, pkg: str) -> dict:
         return {"ok": True, "name": "Android 系统框架", "pkg": pkg, "icon": False, "iconVersion": 0}
 
     # USB 直连由 WebUSB 独占 ADB 接口，服务端再起 adb 会抢走设备并中断投屏。
-    # 有历史缓存就复用；没有缓存也只回包名，绝不在 USB 投屏期间调用本机 adb。
+    # 有本机历史缓存就直接复用；其次从其它设备序列号缓存复用同名包；
+    # 都没有才回退包名，绝不在 USB 投屏期间调用本机 adb。
     if ":" not in serial:
+        local = _read_local_meta(serial, pkg)
+        if local:
+            return local
         cached = _adopt_meta_from_other(serial, pkg)
         if cached:
             return cached

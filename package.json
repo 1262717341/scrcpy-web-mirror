@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-web-mirror",
-  "version": "4.2.5",
+  "version": "4.2.6",
   "description": "scrcpy 便捷网页版: USB/wireless ADB mirror, audio, fullscreen",
   "private": true,
   "license": "Apache-2.0",

@@ -219,7 +219,7 @@ class PacedRenderer {
 }
 
 export class AdbMirror {
-  constructor({ stage, status, onStatus, onError, onStats, onFirstFrame, onController, onLog }) {
+  constructor({ stage, status, onStatus, onError, onStats, onFirstFrame, onController, onLog, onBeforeTeardown }) {
     this.stage = stage;
     this.statusEl = status;
     this.onStatus = onStatus || (() => {});
@@ -228,6 +228,8 @@ export class AdbMirror {
     this.onFirstFrame = onFirstFrame || (() => {});
     this.onController = onController || (() => {});
     this.onLog = onLog || (() => {});
+    // 关闭 ADB 通道之前的异步收尾钩子（如恢复手机原输入法），带超时兜底，不阻塞断流
+    this.onBeforeTeardown = onBeforeTeardown || (() => {});
     this._opts = {};
     this.adb = null;
     this.client = null;
@@ -289,6 +291,23 @@ export class AdbMirror {
   status(text) {
     if (this.statusEl) this.statusEl.textContent = text;
     this.onStatus(text);
+  }
+
+  /** 当前连接的设备标识（无线用 IP:端口，USB 用序列号），供按设备记忆设置 */
+  get serialKey() {
+    return String(this._wirelessTarget || this.device?.serial || "").trim();
+  }
+
+  /** 关闭 ADB 通道前执行收尾钩子，2.5 秒超时兜底，避免断流被卡住 */
+  async _runBeforeTeardown() {
+    try {
+      await Promise.race([
+        Promise.resolve(this.onBeforeTeardown()),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    } catch (e) {
+      this.onLog("before-teardown 钩子失败: " + (e && e.message ? e.message : e));
+    }
   }
 
   /** 连接环境自检 */
@@ -1102,6 +1121,7 @@ export class AdbMirror {
         this._scheduleLateCleanup();
       }
     }
+    await this._runBeforeTeardown();
     try {
       await this.adb?.close();
     } catch {
@@ -1517,6 +1537,8 @@ export class AdbMirror {
     // v4.2.2：先把息屏时间恢复掉，再去做可能超时的收尾。
     // 旧顺序把它放在最后，「停止服务」只等 3 秒时会被直接截断，手机就停在最大值。
     await this.restoreWirelessAwake();
+    // 关闭 ADB 通道前先恢复手机原输入法，否则通道一断恢复命令就发不出去
+    await this._runBeforeTeardown();
     try {
       await this.deviceController?.dispose();
     } catch {

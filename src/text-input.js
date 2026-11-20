@@ -48,9 +48,38 @@ export function parseCurrentIme(output) {
   return v;
 }
 
+const PREV_IME_KEY = "scrcpy-prev-ime";
+
+function _prevKey(serial) {
+  return serial ? PREV_IME_KEY + ":" + serial : PREV_IME_KEY;
+}
+
+/** 持久化投屏前的原输入法：页面刷新 / 上次未正常恢复时仍能找回来 */
+function storePrevIme(serial, ime) {
+  try {
+    if (ime) localStorage.setItem(_prevKey(serial), ime);
+    else localStorage.removeItem(_prevKey(serial));
+  } catch {
+    /* 隐私模式忽略 */
+  }
+}
+
+function readPrevIme(serial) {
+  try {
+    if (serial) {
+      const v = localStorage.getItem(_prevKey(serial));
+      if (v) return v;
+    }
+    return localStorage.getItem(PREV_IME_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 export class DeviceTextInput {
-  constructor(adb) {
+  constructor(adb, serial = "") {
     this.adb = adb || null;
+    this.serial = String(serial || "");
     this.shell = new AdbShell(adb);
     this.previousIme = "";
     this.active = false;
@@ -97,22 +126,66 @@ export class DeviceTextInput {
     );
     if (current === ADB_IME_ID) {
       this.active = true;
+      if (!this.previousIme) this.previousIme = readPrevIme(this.serial);
       return;
     }
-    if (current) this.previousIme = current;
+    if (current) {
+      this.previousIme = current;
+      storePrevIme(this.serial, current);
+    } else if (!this.previousIme) {
+      this.previousIme = readPrevIme(this.serial);
+    }
     const out = await this.shell.run(["ime", "set", ADB_IME_ID], 15000);
     if (/Error|Unknown|not.*found/i.test(out)) throw new Error(out.trim());
     this.active = true;
   }
 
+  /** 从已启用输入法列表里挑第一个非 ADB 输入法作为兜底恢复目标 */
+  async pickFallbackIme() {
+    const listed = await this.shell.run(["ime", "list", "-s"], 15000);
+    const ids = String(listed || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return ids.find((id) => id !== ADB_IME_ID) || "";
+  }
+
   /** 恢复手机原来的输入法 */
   async restore() {
-    if (!this.ready) return "";
-    const prev = this.previousIme;
+    if (!this.ready) {
+      this.active = false;
+      return "";
+    }
+    // 已经是非 ADB 输入法：无需切换，只清掉记忆
+    const current = parseCurrentIme(
+      await this.shell.run(["settings", "get", "secure", "default_input_method"], 10000)
+    );
+    if (current && current !== ADB_IME_ID) {
+      this.active = false;
+      this.previousIme = "";
+      storePrevIme(this.serial, "");
+      return "";
+    }
+    let prev = this.previousIme || readPrevIme(this.serial);
     this.active = false;
-    if (!prev || prev === ADB_IME_ID) return "";
+    if (!prev || prev === ADB_IME_ID) {
+      prev = await this.pickFallbackIme();
+    }
+    if (!prev) {
+      this.previousIme = "";
+      storePrevIme(this.serial, "");
+      return "";
+    }
+    // 目标输入法可能处于停用状态，先启用再切换，否则 `ime set` 会失败
+    try {
+      await this.shell.run(["ime", "enable", prev], 15000);
+    } catch {
+      /* 已启用时 enable 可能报错，忽略后继续 set */
+    }
     const out = await this.shell.run(["ime", "set", prev], 15000);
+    if (/Error|Unknown|not.*found/i.test(out)) throw new Error(out.trim());
     this.previousIme = "";
+    storePrevIme(this.serial, "");
     return out.trim();
   }
 

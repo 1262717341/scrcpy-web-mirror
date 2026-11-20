@@ -740,7 +740,7 @@ const mirror = new AdbMirror({
       if ($("placeholder")) $("placeholder").style.display = "none";
       devicePanels?.notifyConnected();
       if (mirror.adb) {
-        textInput = new DeviceTextInput(mirror.adb);
+        textInput = new DeviceTextInput(mirror.adb, mirror.serialKey);
         refreshImeStatus();
         setTimeout(refreshImeStatus, 900);
         setTimeout(autoProvisionIme, 1200);
@@ -825,6 +825,16 @@ const mirror = new AdbMirror({
     bindControl(controller, canvas);
   },
   onLog: (msg) => logLine("log", String(msg)),
+  // 关闭 ADB 通道前恢复手机原输入法（此时通道仍可用）；断开回调里的 restore 仅作二次兜底
+  onBeforeTeardown: async () => {
+    if (textInput) {
+      try {
+        await textInput.restore();
+      } catch (e) {
+        logLine("error", "断开前恢复输入法失败 " + String(e?.message || e));
+      }
+    }
+  },
 });
 
 devicePanels = bindDevicePanels({
@@ -1534,7 +1544,7 @@ async function refreshImeStatus() {
   const setup = $("btn-ime-setup");
   const restore = $("btn-ime-restore");
   if (!label) return;
-  if (!textInput && mirror.adb) textInput = new DeviceTextInput(mirror.adb);
+  if (!textInput && mirror.adb) textInput = new DeviceTextInput(mirror.adb, mirror.serialKey);
   if (!textInput) {
     label.textContent = "中文输入：未连接设备";
     if (setup) { setup.disabled = true; setup.hidden = true; }
