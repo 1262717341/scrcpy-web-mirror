@@ -7,6 +7,8 @@
 - 平台：Windows 10 / 11，浏览器 Chrome / Edge 110+
 - 下载：**[最新安装包](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**
 
+> **AI 编写说明**：本项目的代码、测试脚本与文档主要由 **豆包 AI 助手（Doubao）** 编写，项目所有者负责提出需求、功能取舍、实机验收与发布决定。AI 生成内容均已经过实机测试和人工复核，但仍建议在重要环境使用前自行审查。
+
 > 非官方项目：本项目是第三方网页端实现，不是 scrcpy 官方项目，与 Genymobile 无隶属或背书关系。第三方组件的版权与许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 ## 功能
@@ -63,7 +65,7 @@ F:\scrcpy便捷网页版\
 │  ├─ v4.2.5\               安装包、iss、测试报告
 │  ├─ v4.2.4\               安装包、iss、测试报告
 │  └─ 历史\                 旧安装包、旧报告、源码快照、压缩包、日志
-├─ tests\                   有线/无线/单元测试与截图
+tests\                   有线/无线/单元测试与截图
 ├─ tools\                   打包与辅助脚本
 └─ installer-lang\          Inno Setup 中文语言文件
 ```
