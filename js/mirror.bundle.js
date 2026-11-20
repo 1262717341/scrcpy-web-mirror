@@ -12953,6 +12953,40 @@
       this._lateTimer = null;
       this._lateActive = false;
       this.muted = false;
+      this._awakeSaved = null;
+      this._awakeApplied = false;
+    }
+    /** 息屏时间快照的本地键：按设备序列号区分，页面被关闭后下次连接仍能补恢复 */
+    _awakeStoreKey() {
+      const id = String(this._wirelessTarget || this.device?.serial || "").trim();
+      return id ? "scrcpy-awake-timeout:" + id : "";
+    }
+    _readAwakeStored() {
+      const key = this._awakeStoreKey();
+      if (!key) return null;
+      try {
+        const raw = localStorage.getItem(key);
+        const n = Number(raw);
+        return raw != null && Number.isFinite(n) && n >= 0 ? n : null;
+      } catch {
+        return null;
+      }
+    }
+    _writeAwakeStored(value) {
+      const key = this._awakeStoreKey();
+      if (!key) return;
+      try {
+        localStorage.setItem(key, String(value));
+      } catch {
+      }
+    }
+    _clearAwakeStored() {
+      const key = this._awakeStoreKey();
+      if (!key) return;
+      try {
+        localStorage.removeItem(key);
+      } catch {
+      }
     }
     status(text) {
       if (this.statusEl) this.statusEl.textContent = text;
@@ -13124,14 +13158,14 @@
       const sub = this.adb?.subprocess;
       if (!sub) return "";
       const command = String(cmd);
-      const withTimeout = (p) => Promise.race([p, new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))]);
+      const withTimeout2 = (p) => Promise.race([p, new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))]);
       try {
         if (sub.shellProtocol) {
-          const r = await withTimeout(sub.shellProtocol.spawnWaitText(command));
+          const r = await withTimeout2(sub.shellProtocol.spawnWaitText(command));
           return String(r && r.stdout || "");
         }
         const proc = await sub.noneProtocol.pty(command);
-        const out = await withTimeout(
+        const out = await withTimeout2(
           proc.output.pipeThrough(new TextDecoderStream()).pipeThrough(new ConcatStringStream())
         );
         try {
@@ -13242,6 +13276,78 @@
       if (sdk > 0) this._sdk = sdk;
       if (remain) this.onLog("\u624B\u673A\u7AEF\u4ECD\u6709 " + remain + " \u4E2A scrcpy \u8FDB\u7A0B\u672A\u9000\u51FA\uFF0C\u7EE7\u7EED\u542F\u52A8\u53EF\u80FD\u62A2\u5360\u97F3\u9891");
       return { sdk, remain };
+    }
+    /**
+     * v4.0.23 无线强制常亮。
+     *
+     * scrcpy 的 stay_awake 只改“插电时常亮”（stay_on_while_plugged_in），
+     * 无线投屏时手机没有 AC/USB/Wireless 供电，系统仍按 screen_off_timeout 息屏。
+     * 因此投屏期间临时把息屏时间设为最大值，并主动唤醒一次；原值保存在 _awakeSaved，
+     * 由 stop / cleanupAfterDrop / _cleanupFailedStart 统一恢复。
+     */
+    async applyWirelessAwake() {
+      if (!this._opts?.stayAwake || this._awakeApplied || !this.adb) return false;
+      try {
+        const raw = String(await this.deviceShell("settings get system screen_off_timeout", 6e3) || "").trim();
+        let original = Number(raw);
+        const stored = this._readAwakeStored();
+        if (stored != null) {
+          if (Number.isFinite(original) && original >= 2e9) {
+            await this.deviceShell("settings put system screen_off_timeout " + stored, 6e3);
+            original = stored;
+            this.onLog("\u68C0\u6D4B\u5230\u4E0A\u6B21\u6295\u5C4F\u672A\u6062\u590D\u606F\u5C4F\u65F6\u95F4\uFF0C\u5DF2\u5148\u8865\u56DE " + Math.round(stored / 1e3) + " \u79D2");
+          }
+          this._clearAwakeStored();
+        }
+        if (!Number.isFinite(original) || original < 0 || original >= 2e9) {
+          this._awakeSaved = null;
+        } else {
+          this._awakeSaved = original;
+          this._writeAwakeStored(original);
+        }
+        this._awakeApplied = true;
+        await this.deviceShell(
+          "settings put system screen_off_timeout 2147483647; input keyevent 224 2>/dev/null; true",
+          8e3
+        );
+        this.onLog(
+          this._awakeSaved == null ? "\u5DF2\u5F00\u542F\u6295\u5C4F\u5F3A\u5236\u5E38\u4EAE\uFF08\u539F\u606F\u5C4F\u65F6\u95F4\u672A\u77E5\u6216\u5DF2\u662F\u6700\u5927\u503C\uFF0C\u505C\u6B62\u540E\u65E0\u6CD5\u81EA\u52A8\u6062\u590D\uFF09" : "\u5DF2\u5F00\u542F\u6295\u5C4F\u5F3A\u5236\u5E38\u4EAE\uFF08\u539F\u606F\u5C4F " + Math.round(this._awakeSaved / 1e3) + " \u79D2\uFF0C\u505C\u6B62\u540E\u6062\u590D\uFF09"
+        );
+        return true;
+      } catch (e) {
+        this.onLog("\u5F3A\u5236\u5E38\u4EAE\u8BBE\u7F6E\u5931\u8D25 " + (e?.message || e));
+        return false;
+      }
+    }
+    async restoreWirelessAwake() {
+      const saved = this._awakeSaved ?? this._readAwakeStored();
+      if (!this._awakeApplied && saved == null) return true;
+      if (saved == null || !this.adb) {
+        this.onLog(
+          saved == null ? "\u672A\u80FD\u6062\u590D\u606F\u5C4F\u65F6\u95F4\uFF1A\u539F\u503C\u672A\u8BB0\u5F55\uFF08\u53EF\u80FD\u4E0A\u6B21\u9875\u9762\u88AB\u76F4\u63A5\u5173\u95ED\uFF09" : "\u672A\u80FD\u6062\u590D\u606F\u5C4F\u65F6\u95F4\uFF1AADB \u5DF2\u65AD\u5F00\uFF0C\u5FEB\u7167\u5DF2\u4FDD\u7559\uFF0C\u4E0B\u6B21\u8FDE\u63A5\u4F1A\u81EA\u52A8\u8865\u6062\u590D"
+        );
+        return false;
+      }
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          await this.deviceShell("settings put system screen_off_timeout " + saved, 6e3);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          const nowRaw = String(await this.deviceShell("settings get system screen_off_timeout", 6e3) || "").trim();
+          const now = Number(nowRaw);
+          if (Number.isFinite(now) && now === saved) {
+            this._awakeApplied = false;
+            this._awakeSaved = null;
+            this._clearAwakeStored();
+            this.onLog("\u5DF2\u6062\u590D\u624B\u673A\u606F\u5C4F\u65F6\u95F4 " + Math.round(saved / 1e3) + " \u79D2");
+            return true;
+          }
+          this.onLog("\u6062\u590D\u606F\u5C4F\u65F6\u95F4\u6821\u9A8C\u4E0D\u4E00\u81F4\uFF08\u7B2C " + attempt + " \u6B21\uFF09\uFF1A\u671F\u671B " + saved + "\uFF0C\u5B9E\u9645 " + (nowRaw || "\u65E0\u56DE\u663E"));
+        } catch (e) {
+          this.onLog("\u6062\u590D\u606F\u5C4F\u65F6\u95F4\u5931\u8D25\uFF08\u7B2C " + attempt + " \u6B21\uFF09\uFF1A" + (e?.message || e));
+        }
+      }
+      this.onLog("\u606F\u5C4F\u65F6\u95F4\u4ECD\u672A\u6062\u590D\uFF0C\u5DF2\u4FDD\u7559\u5FEB\u7167\uFF1B\u4E0B\u6B21\u8FDE\u63A5\u8BBE\u5907\u65F6\u4F1A\u81EA\u52A8\u8865\u6062\u590D");
+      return false;
     }
     /**
      * 手机端看门狗（v4.0.12 起重新收敛为单一职责）：
@@ -13437,6 +13543,7 @@
         const glog = await this.readAudioGuardLog(8);
         if (glog) this.onLog("\u770B\u95E8\u72D7\u65E5\u5FD7\uFF1A" + glog.replace(/\n/g, " | "));
         const ok = await this.releaseSessionOnDevice();
+        await this.restoreWirelessAwake();
         this.onLog(ok ? "\u5DF2\u7ED3\u675F\u624B\u673A\u7AEF scrcpy \u5E76\u5237\u65B0\u97F3\u9891\u8DEF\u7531" : "\u672A\u80FD\u7ED3\u675F\u624B\u673A\u7AEF scrcpy\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
         return ok;
       } catch (e) {
@@ -13548,10 +13655,12 @@
       } catch {
       }
       this.audio = new AudioMirror();
+      await this.restoreWirelessAwake();
       await this.releaseScrcpyOnDevice();
       if (this._wirelessTarget) {
         this.status("\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF0C\u6B63\u5728\u6062\u590D\u624B\u673A\u58F0\u97F3\u2026");
         const ok = await this.restoreWirelessAudio();
+        await this.restoreWirelessAwake();
         if (ok) {
           this.onLog("\u624B\u673A\u58F0\u97F3\u5DF2\u6062\u590D");
         } else {
@@ -13739,7 +13848,7 @@
         version: "5.0.1"
       });
       const serializeOptions = options.serialize.bind(options);
-      options.serialize = () => serializeOptions().filter((line) => !line.startsWith("send_codec_meta=")).concat("send_stream_meta=false");
+      options.serialize = () => serializeOptions().filter((line) => !line.startsWith("send_codec_meta=")).concat("send_stream_meta=false", "capture_orientation=0");
       if (isCam) {
         try {
           options.value.cameraId = source === "camera_front" ? "1" : "0";
@@ -13781,6 +13890,7 @@
       });
       const videoStream = await this.client.videoStream;
       if (!videoStream) throw new MirrorError("scrcpy \u672A\u8FD4\u56DE\u89C6\u9891\u6D41", "NO_VIDEO");
+      await this.applyWirelessAwake();
       const { metadata, stream: packetStream } = videoStream;
       this._size = {
         width: metadata?.width || 0,
@@ -13928,6 +14038,7 @@
         this._lateTimer = null;
       }
       this._lateActive = false;
+      await this.restoreWirelessAwake();
       try {
         await this.deviceController?.dispose();
       } catch {
@@ -13956,6 +14067,7 @@
         }
       } catch {
       }
+      await this.restoreWirelessAwake();
       try {
         await this._wirelessDispose?.();
       } catch {
@@ -13977,6 +14089,7 @@
       } catch {
       }
       this.client = null;
+      await this.restoreWirelessAwake();
       try {
         await this.adb?.close();
       } catch {
@@ -14083,8 +14196,1605 @@
     }
   };
 
+  // src/device-tools.js
+  var DEFAULT_DIR = "/sdcard";
+  function shellQuote(value) {
+    return "'" + String(value).replace(/'/g, "'\\''") + "'";
+  }
+  function normalizePath(input, base = DEFAULT_DIR) {
+    let path = String(input == null ? "" : input).trim();
+    if (!path) path = base;
+    if (!path.startsWith("/")) path = (base.replace(/\/+$/, "") || "") + "/" + path;
+    path = path.replace(/\/{2,}/g, "/");
+    if (path.length > 1) path = path.replace(/\/+$/, "");
+    return path || "/";
+  }
+  function joinPath(dir, name) {
+    const base = normalizePath(dir);
+    const leaf = String(name == null ? "" : name).replace(/^\/+/, "");
+    return normalizePath(base === "/" ? "/" + leaf : base + "/" + leaf);
+  }
+  function parentPath(path) {
+    const p = normalizePath(path);
+    if (p === "/" || p === "") return "/";
+    const idx = p.lastIndexOf("/");
+    return idx <= 0 ? "/" : p.slice(0, idx);
+  }
+  function formatSize(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return "\u2014";
+    if (n < 1024) return n + " B";
+    const units = ["KB", "MB", "GB", "TB"];
+    let value = n / 1024;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit += 1;
+    }
+    return (value >= 10 ? value.toFixed(0) : value.toFixed(1)) + " " + units[unit];
+  }
+  function formatTime(seconds) {
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const d = new Date(n * 1e3);
+    const pad = (v) => String(v).padStart(2, "0");
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function fileKind(name) {
+    const ext = String(name || "").split(".").pop().toLowerCase();
+    if (!ext || ext === name) return "file";
+    if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic"].includes(ext)) return "image";
+    if (["mp4", "mkv", "mov", "avi", "webm", "3gp"].includes(ext)) return "video";
+    if (["mp3", "flac", "wav", "ogg", "m4a", "aac"].includes(ext)) return "audio";
+    if (["apk", "apks", "xapk"].includes(ext)) return "apk";
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "archive";
+    if (["txt", "md", "json", "xml", "log", "csv", "js", "html", "css", "py", "ts"].includes(ext)) return "text";
+    return "file";
+  }
+  function parsePackageList(text) {
+    const names = /* @__PURE__ */ new Set();
+    String(text || "").split(/\r?\n/).forEach((line) => {
+      const m = line.match(/^package:(\S+)\s*$/);
+      if (m) names.add(m[1]);
+    });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+  function mergePackages(all2, thirdParty) {
+    const third = new Set(thirdParty || []);
+    return (all2 || []).map((pkg) => ({ pkg, system: !third.has(pkg) })).sort((a, b) => Number(a.system) - Number(b.system) || a.pkg.localeCompare(b.pkg));
+  }
+  function filterPackages(list, { keyword = "", showSystem = false, scope = "" } = {}) {
+    const kw = String(keyword || "").trim().toLowerCase();
+    const mode2 = scope || (showSystem ? "all" : "third");
+    return (list || []).filter((item) => {
+      if (mode2 === "third" && item.system) return false;
+      if (mode2 === "system" && !item.system) return false;
+      if (!kw) return true;
+      return item.pkg.toLowerCase().includes(kw) || String(item.label || "").toLowerCase().includes(kw);
+    });
+  }
+  var withTimeout = (promise, ms, message) => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message || "\u64CD\u4F5C\u8D85\u65F6")), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  };
+  var AdbShell = class {
+    constructor(adb) {
+      this.adb = adb || null;
+    }
+    get ready() {
+      return !!this.adb?.subprocess?.noneProtocol;
+    }
+    async run(argv, timeoutMs = 2e4) {
+      const sub = this.adb?.subprocess?.noneProtocol;
+      if (!sub) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const output = await withTimeout(sub.spawnWaitText(argv), timeoutMs, "\u8BBE\u5907\u547D\u4EE4\u8D85\u65F6\uFF1A" + (argv || []).join(" "));
+      return String(output == null ? "" : output);
+    }
+    sh(script, timeoutMs) {
+      return this.run(["sh", "-c", shellQuote(script)], timeoutMs);
+    }
+  };
+  var DeviceApps = class {
+    constructor(adb) {
+      this.shell = new AdbShell(adb);
+    }
+    get ready() {
+      return this.shell.ready;
+    }
+    async list({ includeSystem = true } = {}) {
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const [allOut, thirdOut] = await Promise.all([
+        this.shell.run(["pm", "list", "packages"], 25e3),
+        this.shell.run(["pm", "list", "packages", "-3"], 25e3)
+      ]);
+      return mergePackages(parsePackageList(allOut), parsePackageList(thirdOut)).filter(
+        (item) => includeSystem || !item.system
+      );
+    }
+    async start(pkg) {
+      const out = await this.shell.run(["monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], 15e3);
+      if (/No activities found|aborted|Error/i.test(out)) {
+        throw new Error(out.split(/\r?\n/).filter(Boolean).pop() || "\u542F\u52A8\u5931\u8D25");
+      }
+      return out;
+    }
+    async forceStop(pkg) {
+      return await this.shell.run(["am", "force-stop", pkg]);
+    }
+    async clearData(pkg) {
+      const out = await this.shell.run(["pm", "clear", pkg], 2e4);
+      if (!/success/i.test(out)) throw new Error(out.trim() || "\u6E05\u9664\u5931\u8D25");
+      return out.trim();
+    }
+    async setEnabled(pkg, enabled = true) {
+      const args = enabled ? ["pm", "enable", pkg] : ["pm", "disable-user", "--user", "0", pkg];
+      const out = await this.shell.run(args, 2e4);
+      if (!/new state:\s*(enabled|disabled)/i.test(out)) {
+        throw new Error(out.trim().split(/\r?\n/).filter(Boolean).pop() || "\u64CD\u4F5C\u5931\u8D25");
+      }
+      return out.trim();
+    }
+    async uninstall(pkg) {
+      const out = await this.shell.run(["pm", "uninstall", "--user", "0", shellQuote(pkg)], 3e4);
+      if (/Success/i.test(out)) return out.trim();
+      const fallback = await this.shell.run(["pm", "uninstall", shellQuote(pkg)], 3e4);
+      if (!/Success/i.test(fallback)) {
+        throw new Error((fallback || out || "\u5378\u8F7D\u5931\u8D25").trim().split(/\r?\n/).pop());
+      }
+      return fallback.trim();
+    }
+    async detail(pkg) {
+      const out = await this.shell.run(["dumpsys", "package", pkg], 25e3);
+      const lines = out.split(/\r?\n/);
+      const picked = [];
+      const keys = [/versionName=/i, /versionCode=/i, /firstInstallTime=/i, /lastUpdateTime=/i, /targetSdk=/i, /minSdk=/i];
+      for (const line of lines) {
+        if (keys.some((re) => re.test(line))) picked.push(line.trim());
+        if (picked.length >= 8) break;
+      }
+      return picked;
+    }
+    async install(file, onProgress) {
+      return await this.installToPath(file, onProgress);
+    }
+    /** 先推到 /data/local/tmp 再 pm install */
+    async installToPath(file, onProgress, options = {}) {
+      const adb = this.shell.adb;
+      if (!adb?.sync) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const remote = "/data/local/tmp/scrcpy-web-" + Date.now() + ".apk";
+      const sync = await adb.sync();
+      let sent = 0;
+      try {
+        const stream = file.stream().pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              sent += chunk.length;
+              if (onProgress) onProgress({ phase: "push", sent, total: file.size });
+              controller.enqueue(chunk);
+            }
+          })
+        );
+        await sync.write({ filename: remote, file: stream, ...options });
+      } finally {
+        try {
+          await sync.dispose();
+        } catch {
+        }
+      }
+      if (onProgress) onProgress({ phase: "install", sent, total: file.size });
+      const out = await this.shell.run(["pm", "install", "-r", "-t", shellQuote(remote)], 12e4);
+      this.shell.run(["rm", "-f", shellQuote(remote)]).catch(() => {
+      });
+      if (!/Success/i.test(out)) {
+        throw new Error(out.trim().split(/\r?\n/).filter(Boolean).pop() || "\u5B89\u88C5\u5931\u8D25");
+      }
+      return out.trim();
+    }
+    /** 安装设备上已有的 APK */
+    async installRemote(path) {
+      const out = await this.shell.run(["pm", "install", "-r", "-t", shellQuote(normalizePath(path))], 12e4);
+      if (!/Success/i.test(out)) {
+        throw new Error(out.trim().split(/\r?\n/).filter(Boolean).pop() || "\u5B89\u88C5\u5931\u8D25");
+      }
+      return out.trim();
+    }
+  };
+  var DeviceFiles = class {
+    constructor(adb) {
+      this.adb = adb || null;
+      this.shell = new AdbShell(adb);
+      this._sync = null;
+    }
+    get ready() {
+      return !!this.adb?.sync && this.shell.ready;
+    }
+    async _open() {
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      if (!this._sync) this._sync = await this.adb.sync();
+      return this._sync;
+    }
+    _drop() {
+      const s = this._sync;
+      this._sync = null;
+      if (s) {
+        try {
+          s.dispose().catch(() => {
+          });
+        } catch {
+        }
+      }
+    }
+    async _withSync(fn) {
+      const sync = await this._open();
+      try {
+        return await fn(sync);
+      } catch (e) {
+        this._drop();
+        const retry = await this._open();
+        return await fn(retry);
+      }
+    }
+    async list(path) {
+      const dir = normalizePath(path);
+      const entries = await this._withSync((sync) => sync.readdir(dir));
+      const mapped = entries.filter((entry) => entry.name !== "." && entry.name !== "..").map((entry) => ({
+        name: entry.name,
+        dir: Number(entry.type) === 4,
+        link: Number(entry.type) === 10,
+        size: Number(entry.size || 0),
+        mtime: Number(entry.mtime || 0),
+        path: joinPath(dir, entry.name),
+        kind: Number(entry.type) === 4 ? "folder" : fileKind(entry.name)
+      }));
+      mapped.sort((a, b) => {
+        if (a.dir !== b.dir) return a.dir ? -1 : 1;
+        return a.name.localeCompare(b.name, "zh-Hans-CN");
+      });
+      return { path: dir, entries: mapped };
+    }
+    async stat(path) {
+      return await this._withSync((sync) => sync.lstat(normalizePath(path)));
+    }
+    async readBlob(path, onProgress) {
+      const target = normalizePath(path);
+      const chunks = [];
+      let received = 0;
+      await this._withSync(async (sync) => {
+        const stream = sync.read(target);
+        const reader = stream.getReader();
+        try {
+          for (; ; ) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              chunks.push(value);
+              received += value.length;
+              if (onProgress) onProgress(received);
+            }
+          }
+        } finally {
+          try {
+            reader.releaseLock();
+          } catch {
+          }
+        }
+      });
+      return new Blob(chunks, { type: "application/octet-stream" });
+    }
+    async writeBlob(path, blob, onProgress, options = {}) {
+      const target = normalizePath(path);
+      let sent = 0;
+      const file = blob.stream().pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            sent += chunk.length;
+            if (onProgress) onProgress(sent, blob.size);
+            controller.enqueue(chunk);
+          }
+        })
+      );
+      await this._withSync((sync) => sync.write({ filename: target, file, ...options }));
+      return target;
+    }
+    async mkdir(path) {
+      const out = await this.shell.run(["mkdir", "-p", shellQuote(normalizePath(path))]);
+      return out.trim();
+    }
+    async remove(path, recursive = true) {
+      const target = normalizePath(path);
+      if (target === "/" || target === "/sdcard" || target === "/storage/emulated/0") {
+        throw new Error("\u4E0D\u5141\u8BB8\u5220\u9664\u8BE5\u76EE\u5F55");
+      }
+      return await this.shell.run(["rm", "-" + (recursive ? "rf" : "f"), shellQuote(target)], 3e4);
+    }
+    async rename(from, to) {
+      const src = normalizePath(from);
+      const dst = normalizePath(to);
+      const out = await this.shell.run(["mv", shellQuote(src), shellQuote(dst)], 3e4);
+      return out.trim();
+    }
+    /**
+     * v4.0.23 复制文件/文件夹。
+     * 目标由调用方负责生成不冲突的名字；这里只拦“把目录复制进自身子目录”这类必然递归的错误。
+     */
+    async copy(from, to) {
+      const src = normalizePath(from);
+      const dst = normalizePath(to);
+      if (src === "/" || src === "/sdcard" || src === "/storage/emulated/0") {
+        throw new Error("\u4E0D\u5141\u8BB8\u590D\u5236\u8BE5\u76EE\u5F55");
+      }
+      if (src === dst) throw new Error("\u6E90\u548C\u76EE\u6807\u76F8\u540C");
+      if (dst.startsWith(src.replace(/\/+$/, "") + "/")) {
+        throw new Error("\u4E0D\u80FD\u628A\u6587\u4EF6\u5939\u590D\u5236\u5230\u5B83\u81EA\u5DF1\u7684\u5B50\u76EE\u5F55");
+      }
+      const out = await this.shell.run(["cp", "-R", shellQuote(src), shellQuote(dst)], 6e4);
+      return out.trim();
+    }
+    async mediaScan(path) {
+      const target = normalizePath(path);
+      try {
+        await this.shell.run([
+          "am",
+          "broadcast",
+          "-a",
+          "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+          "-d",
+          shellQuote("file://" + target)
+        ]);
+      } catch {
+      }
+    }
+  };
+
+  // src/device-panel.js
+  var FILE_ICONS = {
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+    image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 17l-5-5-9 9"/>',
+    video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M11 9l5 3-5 3z"/>',
+    audio: '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/>',
+    apk: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>',
+    archive: '<path d="M4 6h16v14H4z"/><path d="M4 6l2-2h12l2 2"/><path d="M12 9v6M9 12h6"/>',
+    text: '<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>',
+    file: '<path d="M6 3h9l3 3v15H6z"/><path d="M15 3v3h3"/>'
+  };
+  function iconOf(kind) {
+    return '<svg viewBox="0 0 24 24">' + (FILE_ICONS[kind] || FILE_ICONS.file) + "</svg>";
+  }
+  function safeFilename(name) {
+    return String(name || "download").replace(/[\\/:*?"<>|]/g, "_");
+  }
+  function bindDevicePanels({ getMirror, toast: toast2, log }) {
+    const $2 = (id) => document.getElementById(id);
+    let apps = null;
+    let appsAdb = null;
+    let appsCache = [];
+    let appsBusy = false;
+    let appMeta = /* @__PURE__ */ new Map();
+    const appQueue = [];
+    let appActive = 0;
+    let appScrollBody = null;
+    let appSelectMode = false;
+    let appScope = "all";
+    const appSelected = /* @__PURE__ */ new Set();
+    let files = null;
+    let filesAdb = null;
+    let filesEntries = [];
+    let filesPath = DEFAULT_DIR;
+    let filesBusy = false;
+    let fileSelectMode = false;
+    let fileClipboard = [];
+    const fileSelected = /* @__PURE__ */ new Set();
+    const appsList = () => $2("app-list");
+    const filesList = () => $2("file-list");
+    function appsApi() {
+      const adb = getMirror()?.adb;
+      if (!adb) throw new Error("\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907");
+      if (!apps || appsAdb !== adb) {
+        apps = new DeviceApps(adb);
+        appsAdb = adb;
+        appMeta = /* @__PURE__ */ new Map();
+        appQueue.length = 0;
+      }
+      return apps;
+    }
+    function filesApi() {
+      const adb = getMirror()?.adb;
+      if (!adb) throw new Error("\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907");
+      if (!files || filesAdb !== adb) {
+        files = new DeviceFiles(adb);
+        filesAdb = adb;
+      }
+      return files;
+    }
+    function setAppsStatus(text) {
+      const el = $2("apps-status");
+      if (el) el.textContent = text;
+    }
+    function setFilesStatus(text) {
+      const el = $2("files-status");
+      if (el) el.textContent = text;
+    }
+    function appSerial() {
+      const serial = getMirror()?.device?.serial;
+      if (serial) return String(serial);
+      const status = document.getElementById("stat-serial")?.textContent || "";
+      return status.replace(/^设备\s*[:：]\s*/, "").trim();
+    }
+    function iconUrlOf(pkg, version) {
+      return "/api/app-icon?serial=" + encodeURIComponent(appSerial()) + "&pkg=" + encodeURIComponent(pkg) + "&v=" + encodeURIComponent(String(version || ""));
+    }
+    function applyAppMeta(pkg) {
+      const meta = appMeta.get(pkg);
+      if (!meta) return;
+      if (meta.name) {
+        const item = appsCache.find((a) => a.pkg === pkg);
+        if (item) item.label = meta.name;
+      }
+      document.querySelectorAll(".dev-row[data-pkg]").forEach((row) => {
+        if (row.dataset.pkg !== pkg) return;
+        const name = row.querySelector(".dev-name");
+        if (name && meta.name) {
+          name.textContent = meta.name;
+          name.classList.remove("mono");
+          name.classList.add("app-name");
+        }
+        const metaEl = row.querySelector(".dev-meta");
+        if (metaEl && meta.name) {
+          metaEl.textContent = pkg + (row.dataset.system === "1" ? " \xB7 \u7CFB\u7EDF\u5E94\u7528" : "");
+          metaEl.classList.add("mono");
+        }
+        const avatar = row.querySelector(".dev-avatar");
+        if (avatar && meta.iconUrl && !avatar.dataset.loaded) {
+          avatar.dataset.loaded = "1";
+          const img = document.createElement("img");
+          img.alt = "";
+          img.loading = "lazy";
+          img.src = meta.iconUrl;
+          img.addEventListener("error", () => {
+            avatar.removeAttribute("data-loaded");
+            img.remove();
+          });
+          avatar.replaceChildren(img);
+        }
+      });
+    }
+    async function fetchAppMeta(pkg) {
+      const state = appMeta.get(pkg);
+      if (state && (state.state === "loading" || state.state === "done")) return;
+      appMeta.set(pkg, { name: "", iconUrl: "", state: "loading" });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12e3);
+      try {
+        const res = await fetch(
+          "/api/app-meta?serial=" + encodeURIComponent(appSerial()) + "&pkg=" + encodeURIComponent(pkg),
+          { signal: controller.signal }
+        );
+        const data = await res.json();
+        if (!res.ok || !data?.ok) throw new Error(data?.error || "\u8BFB\u53D6\u5E94\u7528\u4FE1\u606F\u5931\u8D25");
+        const meta = {
+          name: data.name || pkg,
+          iconUrl: data.icon ? iconUrlOf(pkg, data.iconVersion) : "",
+          state: "done"
+        };
+        appMeta.set(pkg, meta);
+        applyAppMeta(pkg);
+      } catch {
+        appMeta.set(pkg, { name: "", iconUrl: "", state: "failed" });
+        document.querySelectorAll(".dev-row[data-pkg]").forEach((row) => {
+          if (row.dataset.pkg !== pkg) return;
+          const metaEl = row.querySelector(".dev-meta");
+          if (metaEl && metaEl.textContent === "\u8BFB\u53D6\u5E94\u7528\u4FE1\u606F\u2026") metaEl.textContent = pkg;
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    function pumpAppQueue() {
+      while (appActive < 5 && appQueue.length) {
+        const pkg = appQueue.shift();
+        appActive += 1;
+        fetchAppMeta(pkg).finally(() => {
+          appActive -= 1;
+          pumpAppQueue();
+        });
+      }
+    }
+    function enqueueAppMeta(pkg) {
+      if (appMeta.has(pkg)) return;
+      if (appQueue.includes(pkg)) return;
+      appQueue.push(pkg);
+      pumpAppQueue();
+    }
+    function loadVisibleAppRows() {
+      const list2 = appsList();
+      if (!list2) return;
+      const body = list2.closest(".drawer-body") || list2;
+      const box = body.getBoundingClientRect();
+      list2.querySelectorAll(".dev-row[data-pkg]").forEach((row) => {
+        const r = row.getBoundingClientRect();
+        if (r.bottom > box.top - 200 && r.top < box.bottom + 200) enqueueAppMeta(row.dataset.pkg);
+      });
+    }
+    function observeAppRows() {
+      const list2 = appsList();
+      if (!list2) return;
+      const body = list2.closest(".drawer-body") || list2;
+      if (appScrollBody !== body) {
+        if (appScrollBody) appScrollBody.removeEventListener("scroll", loadVisibleAppRows);
+        appScrollBody = body;
+        body.addEventListener("scroll", loadVisibleAppRows, { passive: true });
+      }
+      loadVisibleAppRows();
+    }
+    function renderApps() {
+      const list2 = appsList();
+      if (!list2) return;
+      const kw = $2("app-search")?.value || "";
+      const items = filterPackages(appsCache, { keyword: kw, scope: appScope });
+      list2.replaceChildren();
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.className = "list-status";
+        empty.textContent = appsCache.length ? "\u6CA1\u6709\u5339\u914D\u7684\u5E94\u7528" : "\u6682\u65E0\u5E94\u7528\uFF0C\u70B9\u53F3\u4E0A\u89D2\u300C\u5237\u65B0\u300D";
+        list2.appendChild(empty);
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const item of items) {
+        const row = document.createElement("div");
+        row.className = "dev-row";
+        row.dataset.pkg = item.pkg;
+        row.dataset.system = item.system ? "1" : "0";
+        row.classList.toggle("is-picked", appSelected.has(item.pkg));
+        if (appSelectMode) {
+          const pick = document.createElement("span");
+          pick.className = "dev-pick";
+          pick.textContent = appSelected.has(item.pkg) ? "\u2713" : "";
+          row.appendChild(pick);
+        }
+        const avatar = document.createElement("span");
+        avatar.className = "dev-avatar app-avatar";
+        const letter = document.createElement("span");
+        letter.textContent = (item.pkg.split(".").pop() || "?").slice(0, 1);
+        avatar.appendChild(letter);
+        row.appendChild(avatar);
+        const main = document.createElement("div");
+        main.className = "dev-main";
+        const name = document.createElement("span");
+        name.className = "dev-name mono";
+        name.textContent = item.pkg;
+        name.title = "\u70B9\u51FB\u67E5\u770B\u7248\u672C\u4FE1\u606F";
+        name.dataset.appDetail = item.pkg;
+        const meta = document.createElement("span");
+        meta.className = "dev-meta";
+        meta.textContent = item.label ? item.pkg : "\u8BFB\u53D6\u5E94\u7528\u4FE1\u606F\u2026";
+        main.append(name, meta);
+        row.appendChild(main);
+        const actions = document.createElement("div");
+        actions.className = "dev-actions";
+        const addBtn = (act, label, danger) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "mini-btn" + (danger ? " danger" : "");
+          b.dataset.appAct = act;
+          b.dataset.pkg = item.pkg;
+          b.textContent = label;
+          actions.appendChild(b);
+        };
+        addBtn("start", "\u542F\u52A8");
+        addBtn("stop", "\u505C\u6B62");
+        if (!item.system) addBtn("uninstall", "\u5378\u8F7D", true);
+        row.appendChild(actions);
+        frag.appendChild(row);
+      }
+      list2.appendChild(frag);
+      appMeta.forEach((meta, pkg) => {
+        if (meta.state === "done") applyAppMeta(pkg);
+      });
+      observeAppRows();
+    }
+    function updateBatchBar() {
+      const bar = $2("app-batch");
+      if (!bar) return;
+      bar.hidden = false;
+      const count = $2("app-batch-count");
+      if (count) count.textContent = "\u5DF2\u9009 " + appSelected.size + " \u9879";
+      const canAct = appSelected.size > 0 && !appsBusy;
+      const hasSystem = [...appSelected].some((pkg) => appsCache.find((a) => a.pkg === pkg)?.system);
+      document.querySelectorAll("#app-batch .batch-btn").forEach((btn) => {
+        if (btn.dataset.batchAct === "done") return;
+        if (btn.dataset.batchAct === "uninstall") {
+          btn.disabled = !canAct || hasSystem;
+          btn.title = hasSystem ? "\u7CFB\u7EDF\u5E94\u7528\u4E0D\u53EF\u5378\u8F7D" : "";
+          return;
+        }
+        btn.disabled = !canAct;
+      });
+      const selectAllBtn = $2("btn-app-select-all");
+      if (selectAllBtn) {
+        selectAllBtn.disabled = !appSelectMode || !document.querySelectorAll("#app-list .dev-row").length;
+        selectAllBtn.textContent = appSelected.size >= document.querySelectorAll("#app-list .dev-row").length && appSelected.size ? "\u5168\u4E0D\u9009" : "\u5168\u9009";
+      }
+    }
+    function toggleAppPick(pkg, row) {
+      if (appSelected.has(pkg)) appSelected.delete(pkg);
+      else appSelected.add(pkg);
+      const picked = appSelected.has(pkg);
+      row?.classList.toggle("is-picked", picked);
+      const pick = row?.querySelector(".dev-pick");
+      if (pick) pick.textContent = picked ? "\u2713" : "";
+      updateBatchBar();
+    }
+    function selectSingleApp(pkg, row) {
+      appSelected.clear();
+      appSelected.add(pkg);
+      document.querySelectorAll("#app-list .dev-row[data-pkg]").forEach((r) => {
+        const on2 = r === row || r.dataset.pkg === pkg;
+        r.classList.toggle("is-picked", on2);
+        const pick = r.querySelector(".dev-pick");
+        if (pick) pick.textContent = on2 ? "\u2713" : "";
+      });
+      updateBatchBar();
+    }
+    function setAppSelectMode(on2) {
+      appSelectMode = !!on2;
+      if (!appSelectMode) appSelected.clear();
+      const panel = $2("app-list")?.closest(".drawer");
+      panel?.classList.toggle("is-selecting", appSelectMode);
+      const btn = $2("btn-app-select");
+      if (btn) {
+        btn.textContent = appSelectMode ? "\u53D6\u6D88" : "\u591A\u9009";
+        btn.classList.toggle("primary", appSelectMode);
+        btn.classList.toggle("xs-btn", appSelectMode);
+        btn.classList.toggle("ghost", !appSelectMode);
+      }
+      updateBatchBar();
+      renderApps();
+    }
+    function selectAllApps(forceOff) {
+      const rows = [...document.querySelectorAll("#app-list .dev-row[data-pkg]")];
+      const allOn = rows.length > 0 && rows.every((row) => appSelected.has(row.dataset.pkg));
+      const next = forceOff || allOn ? false : true;
+      rows.forEach((row) => {
+        const pkg = row.dataset.pkg;
+        if (next) appSelected.add(pkg);
+        else appSelected.delete(pkg);
+        row.classList.toggle("is-picked", next);
+        const pick = row.querySelector(".dev-pick");
+        if (pick) pick.textContent = next ? "\u2713" : "";
+      });
+      updateBatchBar();
+    }
+    async function runAppBatch(action) {
+      if (action === "done") {
+        setAppSelectMode(false);
+        return;
+      }
+      if (!appSelected.size) return;
+      if (appsBusy) return toast2("\u8FD8\u6709\u64CD\u4F5C\u6B63\u5728\u8FDB\u884C", "\u8BF7\u7A0D\u540E\u518D\u8BD5");
+      const pkgs = [...appSelected];
+      if (action === "uninstall" && pkgs.some((pkg) => appsCache.find((a) => a.pkg === pkg)?.system)) {
+        return toast2("\u7CFB\u7EDF\u5E94\u7528\u4E0D\u53EF\u5378\u8F7D", "\u8BF7\u5148\u53D6\u6D88\u52FE\u9009\u7CFB\u7EDF\u5E94\u7528\uFF0C\u518D\u6279\u91CF\u5378\u8F7D\u7B2C\u4E09\u65B9\u5E94\u7528", { duration: 8e3 });
+      }
+      const labelOf = {
+        stop: "\u5F3A\u884C\u505C\u6B62",
+        disable: "\u505C\u7528",
+        enable: "\u542F\u7528",
+        clear: "\u6E05\u9664\u6570\u636E",
+        uninstall: "\u5378\u8F7D"
+      };
+      const label = labelOf[action] || action;
+      if (action === "clear" || action === "uninstall") {
+        const someSystem = pkgs.some((pkg) => appsCache.find((a) => a.pkg === pkg)?.system);
+        const extra = someSystem ? "\n\u9009\u4E2D\u9879\u542B\u7CFB\u7EDF\u5E94\u7528\uFF0C\u53EF\u80FD\u5BFC\u81F4\u7CFB\u7EDF\u529F\u80FD\u5F02\u5E38\u3002" : "";
+        const tail = action === "clear" ? "\u5E94\u7528\u6570\u636E\u4F1A\u5168\u90E8\u5220\u9664\u3002" : "\u5E94\u7528\u53CA\u5176\u6570\u636E\u4F1A\u88AB\u5220\u9664\u3002";
+        if (!window.confirm("\u6279\u91CF" + label + " " + pkgs.length + " \u4E2A\u5E94\u7528\uFF1F\n" + tail + extra)) return;
+      }
+      appsBusy = true;
+      updateBatchBar();
+      const ok = [];
+      const failed = [];
+      try {
+        const api = appsApi();
+        for (let i = 0; i < pkgs.length; i++) {
+          const pkg = pkgs[i];
+          setAppsStatus("\u6279\u91CF" + label + " " + (i + 1) + "/" + pkgs.length + "\u2026");
+          try {
+            if (action === "stop") await api.forceStop(pkg);
+            else if (action === "disable") await api.setEnabled(pkg, false);
+            else if (action === "enable") await api.setEnabled(pkg, true);
+            else if (action === "clear") await api.clearData(pkg);
+            else if (action === "uninstall") await api.uninstall(pkg);
+            else throw new Error("\u672A\u77E5\u64CD\u4F5C");
+            ok.push(pkg);
+            if (action === "uninstall") appsCache = appsCache.filter((a) => a.pkg !== pkg);
+          } catch (e) {
+            failed.push({ pkg, error: String(e?.message || e) });
+          }
+        }
+      } finally {
+        appsBusy = false;
+        appSelected.clear();
+        renderApps();
+        updateBatchBar();
+        const third = appsCache.filter((a) => !a.system).length;
+        setAppsStatus("\u5171 " + appsCache.length + " \u4E2A\u5E94\u7528\uFF08\u7B2C\u4E09\u65B9 " + third + " \u4E2A\uFF09");
+      }
+      toast2(
+        label + "\u5B8C\u6210",
+        "\u6210\u529F " + ok.length + " \u4E2A" + (failed.length ? "\uFF0C\u5931\u8D25 " + failed.length + " \u4E2A" : ""),
+        failed.length ? { duration: 9e3 } : void 0
+      );
+      log("ok", "\u6279\u91CF" + label + " \u6210\u529F " + ok.length + " \u4E2A");
+      failed.forEach((f) => log("error", "\u6279\u91CF" + label + " \u5931\u8D25 " + f.pkg + "\uFF1A" + f.error));
+      if (failed.length) setAppsStatus("\u6279\u91CF" + label + "\uFF1A" + failed.length + " \u4E2A\u5931\u8D25\uFF0C\u8BE6\u60C5\u89C1\u65E5\u5FD7");
+    }
+    async function refreshApps() {
+      if (appsBusy) return;
+      appsBusy = true;
+      setAppsStatus("\u6B63\u5728\u8BFB\u53D6\u5E94\u7528\u5217\u8868\u2026");
+      const refreshBtn = $2("btn-app-refresh");
+      if (refreshBtn) refreshBtn.disabled = true;
+      try {
+        const api = appsApi();
+        appsCache = await api.list({ includeSystem: true });
+        for (const [pkg, meta] of appMeta) if (meta.state === "error" || meta.state === "failed") appMeta.delete(pkg);
+        const third = appsCache.filter((a) => !a.system).length;
+        setAppsStatus("\u5171 " + appsCache.length + " \u4E2A\u5E94\u7528\uFF08\u7B2C\u4E09\u65B9 " + third + " \u4E2A\uFF09");
+        renderApps();
+        log("info", "\u5E94\u7528\u5217\u8868 " + appsCache.length + " \u9879");
+      } catch (e) {
+        appsCache = [];
+        renderApps();
+        setAppsStatus(String(e?.message || e));
+        toast2("\u8BFB\u53D6\u5E94\u7528\u5931\u8D25", String(e?.message || e));
+        log("error", "\u8BFB\u53D6\u5E94\u7528\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        appsBusy = false;
+        if (refreshBtn) refreshBtn.disabled = false;
+      }
+    }
+    async function runAppAction(action, pkg, button) {
+      if (appsBusy) return;
+      if (action === "uninstall") {
+        const item = appsCache.find((a) => a.pkg === pkg);
+        if (item?.system) return toast2("\u7CFB\u7EDF\u5E94\u7528\u4E0D\u53EF\u5378\u8F7D", pkg + " \u5C5E\u4E8E\u7CFB\u7EDF\u5E94\u7528\uFF0C\u4E0D\u63D0\u4F9B\u5378\u8F7D\u64CD\u4F5C");
+        const danger = "";
+        if (!window.confirm("\u5378\u8F7D " + pkg + " \uFF1F\u5E94\u7528\u6570\u636E\u4F1A\u4E00\u8D77\u5220\u9664\u3002" + danger)) return;
+      }
+      appsBusy = true;
+      if (button) button.disabled = true;
+      try {
+        const api = appsApi();
+        if (action === "start") {
+          await api.start(pkg);
+          toast2("\u5DF2\u542F\u52A8", pkg);
+        } else if (action === "stop") {
+          await api.forceStop(pkg);
+          toast2("\u5DF2\u5F3A\u5236\u505C\u6B62", pkg);
+        } else if (action === "uninstall") {
+          await api.uninstall(pkg);
+          appsCache = appsCache.filter((a) => a.pkg !== pkg);
+          renderApps();
+          toast2("\u5DF2\u5378\u8F7D", pkg);
+        }
+        log("ok", "\u5E94\u7528 " + action + " " + pkg);
+      } catch (e) {
+        toast2("\u64CD\u4F5C\u5931\u8D25", String(e?.message || e));
+        log("error", "\u5E94\u7528 " + action + " \u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        appsBusy = false;
+        if (button) button.disabled = false;
+      }
+    }
+    async function showAppDetail(pkg) {
+      try {
+        const lines = await appsApi().detail(pkg);
+        toast2(pkg, lines.length ? lines.join("\n") : "\u672A\u8BFB\u5230\u7248\u672C\u4FE1\u606F", { duration: 1e4 });
+      } catch (e) {
+        toast2("\u8BFB\u53D6\u8BE6\u60C5\u5931\u8D25", String(e?.message || e));
+      }
+    }
+    async function installApk(file) {
+      if (!file) return;
+      if (appsBusy) return toast2("\u8FD8\u6709\u64CD\u4F5C\u6B63\u5728\u8FDB\u884C", "\u8BF7\u7A0D\u540E\u518D\u8BD5");
+      appsBusy = true;
+      const btn = $2("btn-app-install");
+      if (btn) btn.disabled = true;
+      setAppsStatus("\u6B63\u5728\u63A8\u9001\u5230\u624B\u673A\u2026");
+      let installed = false;
+      try {
+        const api = appsApi();
+        log("info", "\u5F00\u59CB\u5B89\u88C5 " + file.name + " (" + formatSize(file.size) + ")");
+        await api.install(file, (p) => {
+          if (p.phase === "push") {
+            const pct = p.total ? Math.round(p.sent / p.total * 100) : 0;
+            setAppsStatus("\u6B63\u5728\u63A8\u9001\u5230\u624B\u673A\u2026 " + pct + "%");
+          } else {
+            setAppsStatus("\u6B63\u5728\u5B89\u88C5\uFF0C\u5927\u5305\u53EF\u80FD\u9700\u8981\u51E0\u5341\u79D2\u2026");
+          }
+        });
+        installed = true;
+        toast2("\u5B89\u88C5\u6210\u529F", file.name);
+        log("ok", "\u5B89\u88C5\u6210\u529F " + file.name);
+      } catch (e) {
+        setAppsStatus("\u5B89\u88C5\u5931\u8D25\uFF1A" + String(e?.message || e));
+        toast2("\u5B89\u88C5\u5931\u8D25", String(e?.message || e));
+        log("error", "\u5B89\u88C5\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        appsBusy = false;
+        if (btn) btn.disabled = false;
+      }
+      if (installed) await refreshApps();
+    }
+    function renderFiles() {
+      const list2 = filesList();
+      if (!list2) return;
+      list2.replaceChildren();
+      if (!filesEntries.length) {
+        const empty = document.createElement("p");
+        empty.className = "list-status";
+        empty.textContent = "\u8FD9\u4E2A\u76EE\u5F55\u662F\u7A7A\u7684";
+        list2.appendChild(empty);
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const entry of filesEntries) {
+        const row = document.createElement("div");
+        row.className = "dev-row" + (entry.dir ? " is-dir" : "");
+        row.dataset.name = entry.name;
+        row.dataset.path = entry.path;
+        row.classList.toggle("is-picked", fileSelected.has(entry.path));
+        if (fileSelectMode) {
+          const pick = document.createElement("span");
+          pick.className = "dev-pick";
+          pick.textContent = fileSelected.has(entry.path) ? "\u2713" : "";
+          row.appendChild(pick);
+        }
+        const avatar = document.createElement("span");
+        avatar.className = "dev-avatar";
+        avatar.innerHTML = iconOf(entry.dir ? "folder" : entry.kind);
+        row.appendChild(avatar);
+        const main = document.createElement("div");
+        main.className = "dev-main";
+        const name = document.createElement("span");
+        name.className = "dev-name";
+        name.textContent = entry.name + (entry.link ? " \u2197" : "");
+        name.title = entry.path;
+        const meta = document.createElement("span");
+        meta.className = "dev-meta";
+        meta.textContent = entry.dir ? "\u6587\u4EF6\u5939" : formatSize(entry.size) + (entry.mtime ? " \xB7 " + formatTime(entry.mtime) : "");
+        main.append(name, meta);
+        row.appendChild(main);
+        const actions = document.createElement("div");
+        actions.className = "dev-actions";
+        if (!entry.dir && entry.kind === "apk") {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "mini-btn";
+          b.dataset.fileAct = "install";
+          b.textContent = "\u5B89\u88C5";
+          actions.appendChild(b);
+        }
+        if (!entry.dir) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "mini-btn";
+          b.dataset.fileAct = "download";
+          b.textContent = "\u4E0B\u8F7D";
+          actions.appendChild(b);
+        }
+        const rename = document.createElement("button");
+        rename.type = "button";
+        rename.className = "mini-btn";
+        rename.dataset.fileAct = "rename";
+        rename.textContent = "\u6539\u540D";
+        actions.appendChild(rename);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "mini-btn danger";
+        del.dataset.fileAct = "delete";
+        del.textContent = "\u5220\u9664";
+        actions.appendChild(del);
+        row.appendChild(actions);
+        frag.appendChild(row);
+      }
+      list2.appendChild(frag);
+    }
+    function fileKindLabel(entry) {
+      if (entry.dir) return "\u6587\u4EF6\u5939";
+      if (entry.link) return "\u7B26\u53F7\u94FE\u63A5";
+      if (entry.kind === "apk") return "APK \u5B89\u88C5\u5305";
+      const m = /\.([a-z0-9]{1,8})$/i.exec(entry.name || "");
+      return m ? m[1].toUpperCase() + " \u6587\u4EF6" : "\u6587\u4EF6";
+    }
+    function fileMtimeText(entry) {
+      if (!entry.mtime) return "\u672A\u77E5";
+      const d = new Date(Number(entry.mtime) * 1e3);
+      if (Number.isNaN(d.getTime())) return "\u672A\u77E5";
+      return d.toLocaleString("zh-CN", { hour12: false });
+    }
+    function showFileDetail(entry) {
+      const name = entry.name + (entry.link ? " \u2197" : "");
+      const size = entry.dir ? "\u2014\uFF08\u6587\u4EF6\u5939\uFF09" : formatSize(entry.size) + "\uFF08" + Number(entry.size || 0).toLocaleString("zh-CN") + " \u5B57\u8282\uFF09";
+      const lines = [
+        "\u540D\u79F0\uFF1A" + name,
+        "\u7C7B\u578B\uFF1A" + fileKindLabel(entry),
+        "\u5927\u5C0F\uFF1A" + size,
+        "\u4FEE\u6539\u65F6\u95F4\uFF1A" + fileMtimeText(entry),
+        "\u8DEF\u5F84\uFF1A" + entry.path
+      ];
+      toast2("\u6587\u4EF6\u8BE6\u60C5", lines.join("\n"), { duration: 12e3 });
+    }
+    function updateFileBatchBar() {
+      const bar = $2("file-batch");
+      if (!bar) return;
+      bar.hidden = false;
+      const count = $2("file-batch-count");
+      if (count) count.textContent = "\u5DF2\u9009 " + fileSelected.size + " \u9879";
+      const selected = [...fileSelected];
+      const one = selected.length === 1;
+      const has = selected.length > 0 && !filesBusy;
+      document.querySelectorAll("#file-batch .batch-btn").forEach((btn) => {
+        const act = btn.dataset.fileBatchAct;
+        if (act === "cancel") {
+          btn.disabled = false;
+          return;
+        }
+        if (act === "all") return;
+        if (act === "detail") btn.disabled = !one || filesBusy;
+        else if (act === "paste") btn.disabled = !fileClipboard.length || filesBusy;
+        else btn.disabled = !has;
+        if (act === "paste") btn.textContent = fileClipboard.length ? "\u7C98\u8D34 " + fileClipboard.length : "\u7C98\u8D34";
+      });
+      const selectAll = $2("btn-file-select-all");
+      if (selectAll) {
+        selectAll.disabled = !fileSelectMode || !filesEntries.length;
+        selectAll.textContent = fileSelected.size >= filesEntries.length && fileSelected.size ? "\u5168\u4E0D\u9009" : "\u5168\u9009";
+      }
+    }
+    function setFileSelectMode(on2) {
+      fileSelectMode = !!on2;
+      if (!fileSelectMode) fileSelected.clear();
+      const panel = $2("file-list")?.closest(".drawer");
+      panel?.classList.toggle("is-selecting", fileSelectMode);
+      const btn = $2("btn-file-select");
+      if (btn) {
+        btn.textContent = fileSelectMode ? "\u53D6\u6D88" : "\u591A\u9009";
+        btn.classList.toggle("primary", fileSelectMode);
+        btn.classList.toggle("ghost", !fileSelectMode);
+      }
+      updateFileBatchBar();
+      renderFiles();
+    }
+    function toggleFilePick(path, row) {
+      if (fileSelected.has(path)) fileSelected.delete(path);
+      else fileSelected.add(path);
+      const picked = fileSelected.has(path);
+      row?.classList.toggle("is-picked", picked);
+      const pick = row?.querySelector(".dev-pick");
+      if (pick) pick.textContent = picked ? "\u2713" : "";
+      updateFileBatchBar();
+    }
+    function selectSingleFile(entry, row) {
+      fileSelected.clear();
+      fileSelected.add(entry.path);
+      document.querySelectorAll("#file-list .dev-row[data-path]").forEach((r) => {
+        const on2 = r === row || r.dataset.path === entry.path;
+        r.classList.toggle("is-picked", on2);
+        const pick = r.querySelector(".dev-pick");
+        if (pick) pick.textContent = on2 ? "\u2713" : "";
+      });
+      updateFileBatchBar();
+    }
+    function selectAllFiles(forceOff = false) {
+      const allOn = filesEntries.length > 0 && filesEntries.every((e) => fileSelected.has(e.path));
+      const next = forceOff || allOn ? false : true;
+      filesEntries.forEach((e) => {
+        if (next) fileSelected.add(e.path);
+        else fileSelected.delete(e.path);
+      });
+      document.querySelectorAll("#file-list .dev-row[data-path]").forEach((r) => {
+        r.classList.toggle("is-picked", next);
+        const pick = r.querySelector(".dev-pick");
+        if (pick) pick.textContent = next ? "\u2713" : "";
+      });
+      updateFileBatchBar();
+    }
+    function uniqueCopyName(name, isDir, used) {
+      if (!used.has(String(name).toLowerCase())) return name;
+      const m = isDir ? null : /^(.*?)(\.[^.]+)?$/.exec(name);
+      const base = m ? m[1] : name;
+      const ext = m && m[2] ? m[2] : "";
+      let i = 1;
+      let candidate = name;
+      do {
+        candidate = base + (i === 1 ? " - \u526F\u672C" : " - \u526F\u672C (" + i + ")") + ext;
+        i += 1;
+      } while (used.has(candidate.toLowerCase()));
+      return candidate;
+    }
+    async function copySelectedFiles() {
+      if (!fileSelected.size || filesBusy) return;
+      const entries = filesEntries.filter((e) => fileSelected.has(e.path));
+      fileClipboard = entries.map((e) => ({ path: e.path, name: e.name, dir: !!e.dir }));
+      setFileSelectMode(false);
+      toast2("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F", fileClipboard.map((e) => e.name).join("\u3001") + "\n\u5DF2\u7ED3\u675F\u672C\u6B21\u591A\u9009\uFF0C\u5207\u6362\u5230\u76EE\u6807\u6587\u4EF6\u5939\u540E\u70B9\u300C\u7C98\u8D34\u300D", {
+        duration: 9e3
+      });
+      log("info", "\u6587\u4EF6\u526A\u8D34\u677F " + fileClipboard.length + " \u9879");
+    }
+    function cancelFileCopy() {
+      const had = fileClipboard.length;
+      fileClipboard = [];
+      setFileSelectMode(false);
+      if (had) {
+        toast2("\u5DF2\u53D6\u6D88\u590D\u5236", "\u526A\u8D34\u677F\u5DF2\u6E05\u7A7A\uFF0C\u5171\u79FB\u9664 " + had + " \u9879");
+        log("info", "\u53D6\u6D88\u6587\u4EF6\u590D\u5236\uFF0C\u6E05\u7A7A " + had + " \u9879");
+      }
+    }
+    async function pasteClipboard() {
+      if (!fileClipboard.length || filesBusy) return;
+      const targetDir = filesPath;
+      filesBusy = true;
+      updateFileBatchBar();
+      const ok = [];
+      const failed = [];
+      const used = new Set(filesEntries.map((e) => String(e.name).toLowerCase()));
+      try {
+        const api = filesApi();
+        for (const item of fileClipboard) {
+          const src = item.path;
+          if (item.dir && (targetDir === src || targetDir.replace(/\/+$/, "").startsWith(src.replace(/\/+$/, "") + "/"))) {
+            failed.push(item.name + "\uFF08\u4E0D\u80FD\u7C98\u8D34\u5230\u81EA\u8EAB\u5B50\u76EE\u5F55\uFF09");
+            continue;
+          }
+          const next = uniqueCopyName(item.name, item.dir, used);
+          const dst = joinPath(targetDir, next);
+          setFilesStatus("\u6B63\u5728\u7C98\u8D34 " + item.name + " \u2192 " + next + " \u2026");
+          try {
+            await api.copy(src, dst);
+            used.add(next.toLowerCase());
+            ok.push(next);
+          } catch (e) {
+            failed.push(item.name + "\uFF08" + String(e?.message || e).slice(0, 80) + "\uFF09");
+          }
+        }
+        await loadDir(targetDir, { silent: true, force: true });
+        if (ok.length) {
+          toast2("\u7C98\u8D34\u5B8C\u6210", ok.join("\u3001"), { duration: 7e3 });
+          log("ok", "\u7C98\u8D34 " + ok.length + " \u9879\u5230 " + targetDir);
+        }
+        if (failed.length) {
+          toast2("\u90E8\u5206\u7C98\u8D34\u5931\u8D25", failed.join("\n"), { duration: 12e3 });
+          log("error", "\u7C98\u8D34\u5931\u8D25 " + failed.join(" | "));
+        }
+      } catch (e) {
+        toast2("\u7C98\u8D34\u5931\u8D25", String(e?.message || e));
+        log("error", "\u7C98\u8D34\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+        updateFileBatchBar();
+      }
+    }
+    async function deleteSelectedFiles() {
+      if (!fileSelected.size || filesBusy) return;
+      const entries = filesEntries.filter((e) => fileSelected.has(e.path));
+      if (!entries.length) return;
+      const dirs = entries.filter((e) => e.dir).length;
+      if (!window.confirm(
+        "\u5220\u9664\u9009\u4E2D\u7684 " + entries.length + " \u9879\uFF1F" + (dirs ? "\n\u5176\u4E2D " + dirs + " \u4E2A\u6587\u4EF6\u5939\u4F1A\u8FDE\u540C\u5185\u90E8\u5185\u5BB9\u4E00\u8D77\u5220\u9664\u3002" : "") + "\n\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002"
+      ))
+        return;
+      filesBusy = true;
+      updateFileBatchBar();
+      const ok = [];
+      const failed = [];
+      try {
+        const api = filesApi();
+        for (const entry of entries) {
+          setFilesStatus("\u6B63\u5728\u5220\u9664 " + entry.name + " \u2026");
+          try {
+            await api.remove(entry.path, true);
+            ok.push(entry.name);
+          } catch (e) {
+            failed.push(entry.name + "\uFF08" + String(e?.message || e).slice(0, 80) + "\uFF09");
+          }
+        }
+        fileSelected.clear();
+        await loadDir(filesPath, { silent: true, force: true });
+        if (failed.length) {
+          toast2("\u90E8\u5206\u5220\u9664\u5931\u8D25", failed.join("\n"), { duration: 12e3 });
+          log("error", "\u6279\u91CF\u5220\u9664\u5931\u8D25 " + failed.join(" | "));
+        } else {
+          toast2("\u5DF2\u5220\u9664 " + ok.length + " \u9879", ok.join("\u3001"), { duration: 7e3 });
+          log("ok", "\u6279\u91CF\u5220\u9664 " + ok.join("\u3001"));
+        }
+      } finally {
+        filesBusy = false;
+        updateFileBatchBar();
+      }
+    }
+    async function runFileBatch(action) {
+      if (action === "all") {
+        selectAllFiles(false);
+        return;
+      }
+      if (action === "cancel") {
+        cancelFileCopy();
+        return;
+      }
+      if (action === "detail") {
+        const entry = filesEntries.find((e) => e.path === [...fileSelected][0]);
+        if (entry) showFileDetail(entry);
+        return;
+      }
+      if (action === "copy") return copySelectedFiles();
+      if (action === "paste") return pasteClipboard();
+      if (action === "delete") return deleteSelectedFiles();
+    }
+    function syncQuickChips() {
+      document.querySelectorAll("#file-quick button").forEach((b) => {
+        b.classList.toggle("active", normalizePath(b.dataset.path) === filesPath);
+      });
+    }
+    async function loadDir(input, { silent = false, force = false } = {}) {
+      if (filesBusy && !force) return;
+      const target = normalizePath(input || filesPath || DEFAULT_DIR);
+      if (fileSelectMode) setFileSelectMode(false);
+      else fileSelected.clear();
+      const prevBusy = filesBusy;
+      filesBusy = true;
+      setFilesStatus("\u6B63\u5728\u8BFB\u53D6 " + target + " \u2026");
+      try {
+        const api = filesApi();
+        const result = await api.list(target);
+        filesPath = result.path;
+        filesEntries = result.entries;
+        const box = $2("file-path");
+        if (box) box.value = filesPath;
+        renderFiles();
+        updateFileBatchBar();
+        syncQuickChips();
+        setFilesStatus(filesEntries.length ? filesPath + " \xB7 " + filesEntries.length + " \u9879" : filesPath + " \xB7 \u7A7A\u76EE\u5F55");
+        if (!silent) log("info", "\u6587\u4EF6\u76EE\u5F55 " + filesPath + " (" + filesEntries.length + " \u9879)");
+      } catch (e) {
+        setFilesStatus("\u8BFB\u53D6\u5931\u8D25\uFF1A" + String(e?.message || e));
+        if (!silent) toast2("\u6253\u5F00\u76EE\u5F55\u5931\u8D25", String(e?.message || e));
+        log("error", "\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = prevBusy;
+        updateFileBatchBar();
+      }
+    }
+    function downloadBlob(blob, name) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = safeFilename(name);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 8e3);
+    }
+    async function downloadFile(entry) {
+      if (filesBusy) return;
+      filesBusy = true;
+      setFilesStatus("\u6B63\u5728\u4E0B\u8F7D " + entry.name + " \u2026");
+      try {
+        const api = filesApi();
+        const blob = await api.readBlob(entry.path, (n) => {
+          if (entry.size) {
+            setFilesStatus("\u6B63\u5728\u4E0B\u8F7D " + entry.name + " \u2026 " + Math.round(n / entry.size * 100) + "%");
+          }
+        });
+        downloadBlob(blob, entry.name);
+        toast2("\u5DF2\u4E0B\u8F7D\u5230\u7535\u8111", entry.name + " \xB7 " + formatSize(blob.size));
+        log("ok", "\u4E0B\u8F7D " + entry.path + " (" + formatSize(blob.size) + ")");
+        setFilesStatus(filesPath + " \xB7 " + filesEntries.length + " \u9879");
+      } catch (e) {
+        setFilesStatus("\u4E0B\u8F7D\u5931\u8D25\uFF1A" + String(e?.message || e));
+        toast2("\u4E0B\u8F7D\u5931\u8D25", String(e?.message || e));
+        log("error", "\u4E0B\u8F7D\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+      }
+    }
+    async function uploadFiles(fileList) {
+      const items = Array.from(fileList || []);
+      if (!items.length || filesBusy) return;
+      filesBusy = true;
+      try {
+        const api = filesApi();
+        for (const file of items) {
+          if (/\.apk$/i.test(file.name)) {
+            setFilesStatus("\u68C0\u6D4B\u5230 APK\uFF0C\u8F6C\u53BB\u5B89\u88C5\uFF1A" + file.name);
+            await installApk(file);
+            continue;
+          }
+          const target = joinPath(filesPath, file.name);
+          setFilesStatus("\u6B63\u5728\u4E0A\u4F20 " + file.name + " \u2026");
+          await api.writeBlob(target, file, (sent, total) => {
+            const pct = total ? Math.round(sent / total * 100) : 0;
+            setFilesStatus("\u6B63\u5728\u4E0A\u4F20 " + file.name + " \u2026 " + pct + "%");
+          });
+          await api.mediaScan(target);
+          log("ok", "\u4E0A\u4F20 " + target + " (" + formatSize(file.size) + ")");
+        }
+        toast2("\u4E0A\u4F20\u5B8C\u6210", items.map((f) => f.name).join("\u3001"));
+        await loadDir(filesPath, { silent: true, force: true });
+      } catch (e) {
+        setFilesStatus("\u4E0A\u4F20\u5931\u8D25\uFF1A" + String(e?.message || e));
+        toast2("\u4E0A\u4F20\u5931\u8D25", String(e?.message || e));
+        log("error", "\u4E0A\u4F20\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+      }
+    }
+    async function removeEntry(entry) {
+      if (filesBusy) return;
+      if (!window.confirm("\u5220\u9664" + (entry.dir ? "\u6587\u4EF6\u5939" : "\u6587\u4EF6") + " " + entry.name + " \uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002")) return;
+      filesBusy = true;
+      try {
+        await filesApi().remove(entry.path, true);
+        toast2("\u5DF2\u5220\u9664", entry.name);
+        log("ok", "\u5220\u9664 " + entry.path);
+        await loadDir(filesPath, { silent: true, force: true });
+      } catch (e) {
+        toast2("\u5220\u9664\u5931\u8D25", String(e?.message || e));
+        log("error", "\u5220\u9664\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+      }
+    }
+    async function renameEntry(entry) {
+      if (filesBusy) return;
+      const next = window.prompt("\u91CD\u547D\u540D\u4E3A\uFF08\u53EA\u586B\u540D\u79F0\uFF09", entry.name);
+      if (!next || next === entry.name) return;
+      if (next.includes("/")) return toast2("\u540D\u79F0\u4E0D\u80FD\u5305\u542B /");
+      filesBusy = true;
+      try {
+        await filesApi().rename(entry.path, joinPath(filesPath, next));
+        toast2("\u5DF2\u91CD\u547D\u540D", next);
+        log("ok", "\u91CD\u547D\u540D " + entry.path + " \u2192 " + next);
+        await loadDir(filesPath, { silent: true, force: true });
+      } catch (e) {
+        toast2("\u91CD\u547D\u540D\u5931\u8D25", String(e?.message || e));
+        log("error", "\u91CD\u547D\u540D\u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+      }
+    }
+    async function installFromDevice(entry) {
+      if (filesBusy) return;
+      if (!window.confirm("\u5728\u624B\u673A\u4E0A\u5B89\u88C5 " + entry.name + " \uFF1F")) return;
+      filesBusy = true;
+      setFilesStatus("\u6B63\u5728\u5B89\u88C5 " + entry.name + " \u2026");
+      try {
+        await appsApi().installRemote(entry.path);
+        toast2("\u5B89\u88C5\u6210\u529F", entry.name);
+        log("ok", "\u5B89\u88C5\u8BBE\u5907\u5185 APK " + entry.path);
+        setFilesStatus(filesPath + " \xB7 " + filesEntries.length + " \u9879");
+      } catch (e) {
+        toast2("\u5B89\u88C5\u5931\u8D25", String(e?.message || e));
+        setFilesStatus("\u5B89\u88C5\u5931\u8D25\uFF1A" + String(e?.message || e));
+        log("error", "\u5B89\u88C5\u8BBE\u5907\u5185 APK \u5931\u8D25 " + String(e?.message || e));
+      } finally {
+        filesBusy = false;
+      }
+    }
+    async function mkdirHere() {
+      if (filesBusy) return;
+      const name = window.prompt("\u65B0\u5EFA\u6587\u4EF6\u5939\u540D\u79F0", "\u65B0\u5EFA\u6587\u4EF6\u5939");
+      if (!name) return;
+      if (name.includes("/")) return toast2("\u540D\u79F0\u4E0D\u80FD\u5305\u542B /");
+      try {
+        await filesApi().mkdir(joinPath(filesPath, name));
+        toast2("\u5DF2\u521B\u5EFA", name);
+        await loadDir(filesPath, { silent: true, force: true });
+      } catch (e) {
+        toast2("\u521B\u5EFA\u5931\u8D25", String(e?.message || e));
+      }
+    }
+    const list = appsList();
+    if (list) {
+      list.addEventListener("click", (e) => {
+        if (appSelectMode) {
+          const row2 = e.target.closest(".dev-row[data-pkg]");
+          if (row2) {
+            e.preventDefault();
+            toggleAppPick(row2.dataset.pkg, row2);
+          }
+          return;
+        }
+        const btn = e.target.closest("button[data-app-act]");
+        if (btn) {
+          e.preventDefault();
+          runAppAction(btn.dataset.appAct, btn.dataset.pkg, btn);
+          return;
+        }
+        const row = e.target.closest(".dev-row[data-pkg]");
+        if (row) {
+          e.preventDefault();
+          selectSingleApp(row.dataset.pkg, row);
+        }
+        const name = e.target.closest("[data-app-detail]");
+        if (name) showAppDetail(name.dataset.appDetail);
+      });
+    }
+    $2("btn-app-select")?.addEventListener("click", () => setAppSelectMode(!appSelectMode));
+    $2("btn-app-select-all")?.addEventListener("click", () => selectAllApps(false));
+    $2("app-batch")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-batch-act]");
+      if (btn) runAppBatch(btn.dataset.batchAct);
+    });
+    $2("app-search")?.addEventListener("input", renderApps);
+    document.querySelectorAll("#app-scope .scope-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        appScope = btn.dataset.scope || "all";
+        appSelected.clear();
+        document.querySelectorAll("#app-scope .scope-btn").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+          b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+        });
+        updateBatchBar();
+        renderApps();
+      });
+    });
+    $2("btn-app-refresh")?.addEventListener("click", () => refreshApps());
+    $2("btn-app-install")?.addEventListener("click", () => $2("app-apk-input")?.click());
+    const apkInput = $2("app-apk-input");
+    apkInput?.addEventListener("change", async () => {
+      const file = apkInput.files?.[0];
+      apkInput.value = "";
+      await installApk(file);
+    });
+    const filesBox = filesList();
+    if (filesBox) {
+      filesBox.addEventListener("click", async (e) => {
+        const row = e.target.closest(".dev-row[data-path]");
+        if (!row) return;
+        const entry = filesEntries.find((item) => item.path === row.dataset.path);
+        if (!entry) return;
+        if (fileSelectMode) {
+          e.preventDefault();
+          toggleFilePick(entry.path, row);
+          return;
+        }
+        const btn = e.target.closest("button[data-file-act]");
+        if (btn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const act = btn.dataset.fileAct;
+          if (act === "download") await downloadFile(entry);
+          else if (act === "delete") await removeEntry(entry);
+          else if (act === "rename") await renameEntry(entry);
+          else if (act === "install") await installFromDevice(entry);
+          return;
+        }
+        if (entry.dir) {
+          await loadDir(entry.path);
+          return;
+        }
+        selectSingleFile(entry, row);
+        showFileDetail(entry);
+      });
+    }
+    $2("btn-file-select")?.addEventListener("click", () => setFileSelectMode(!fileSelectMode));
+    $2("file-batch")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-file-batch-act]");
+      if (btn) runFileBatch(btn.dataset.fileBatchAct);
+    });
+    $2("btn-file-refresh")?.addEventListener("click", () => loadDir(filesPath));
+    $2("btn-file-up")?.addEventListener("click", () => loadDir(parentPath(filesPath)));
+    $2("btn-file-go")?.addEventListener("click", () => loadDir($2("file-path")?.value || DEFAULT_DIR));
+    $2("file-path")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        loadDir($2("file-path")?.value || DEFAULT_DIR);
+      }
+    });
+    $2("btn-file-upload")?.addEventListener("click", () => {
+      if (!getMirror()?.adb) return toast2("\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907");
+      $2("file-upload")?.click();
+    });
+    $2("btn-file-newdir")?.addEventListener("click", mkdirHere);
+    const uploadInput = $2("file-upload");
+    uploadInput?.addEventListener("change", async () => {
+      const picked = Array.from(uploadInput.files || []);
+      uploadInput.value = "";
+      await uploadFiles(picked);
+    });
+    document.querySelectorAll("#file-quick button").forEach((btn) => {
+      btn.addEventListener("click", () => loadDir(btn.dataset.path));
+    });
+    const filesPanel = document.querySelector('[data-panel="files"]');
+    if (filesPanel) {
+      const over = (e) => {
+        e.preventDefault();
+        filesPanel.classList.add("is-drop");
+      };
+      const leave = () => filesPanel.classList.remove("is-drop");
+      filesPanel.addEventListener("dragover", over);
+      filesPanel.addEventListener("dragleave", leave);
+      filesPanel.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        leave();
+        const dropped = Array.from(e.dataTransfer?.files || []);
+        if (!dropped.length) return;
+        await uploadFiles(dropped);
+      });
+    }
+    const appsPanel = document.querySelector('[data-panel="apps"]');
+    if (appsPanel) {
+      const over = (e) => {
+        e.preventDefault();
+        appsPanel.classList.add("is-drop");
+      };
+      const leave = () => appsPanel.classList.remove("is-drop");
+      appsPanel.addEventListener("dragover", over);
+      appsPanel.addEventListener("dragleave", leave);
+      appsPanel.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        leave();
+        const dropped = Array.from(e.dataTransfer?.files || []);
+        const apk = dropped.find((f) => /\.apk$/i.test(f.name));
+        if (apk) await installApk(apk);
+        else if (dropped.length) toast2("\u8FD9\u91CC\u53EA\u63A5\u6536 APK", "\u5176\u4ED6\u6587\u4EF6\u8BF7\u62D6\u5230\u300C\u6587\u4EF6\u300D\u9762\u677F\u4E0A\u4F20");
+      });
+    }
+    document.querySelectorAll('[data-drawer="apps"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!appsCache.length) refreshApps();
+      });
+    });
+    document.querySelectorAll('[data-drawer="files"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!getMirror()?.adb) return setFilesStatus("\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907");
+        if (!filesEntries.length) loadDir(filesPath);
+      });
+    });
+    setAppsStatus("\u8FDE\u63A5\u8BBE\u5907\u540E\u52A0\u8F7D");
+    setFilesStatus("\u8FDE\u63A5\u8BBE\u5907\u540E\u52A0\u8F7D");
+    if ($2("file-path")) $2("file-path").value = filesPath;
+    if (location.search.includes("debug")) {
+      window.__filesApi = filesApi;
+      window.__appsApi = appsApi;
+    }
+    return {
+      markDisconnected() {
+        apps = null;
+        appsAdb = null;
+        appsCache = [];
+        files = null;
+        filesAdb = null;
+        filesEntries = [];
+        if (appsList()) appsList().replaceChildren();
+        if (filesList()) filesList().replaceChildren();
+        setAppsStatus("\u8BBE\u5907\u5DF2\u65AD\u5F00\uFF0C\u91CD\u65B0\u8FDE\u63A5\u540E\u70B9\u300C\u5237\u65B0\u300D");
+        setFilesStatus("\u8BBE\u5907\u5DF2\u65AD\u5F00\uFF0C\u91CD\u65B0\u8FDE\u63A5\u540E\u70B9\u300C\u5237\u65B0\u300D");
+      },
+      notifyConnected() {
+        setAppsStatus("\u5DF2\u8FDE\u63A5\uFF0C\u70B9\u300C\u5237\u65B0\u300D\u8BFB\u53D6\u5E94\u7528");
+        setFilesStatus("\u5DF2\u8FDE\u63A5\uFF0C\u70B9\u300C\u5237\u65B0\u300D\u8BFB\u53D6\u6587\u4EF6");
+      }
+    };
+  }
+
+  // src/text-input.js
+  var ADB_IME_PACKAGE = "com.android.adbkeyboard";
+  var ADB_IME_ID = "com.android.adbkeyboard/.AdbIME";
+  var ADB_APK_URL = "./assets/adbkeyboard/ADBKeyboard.apk";
+  function hasNonAscii(text) {
+    return /[^\x00-\x7f]/.test(String(text ?? ""));
+  }
+  function utf8ToBase64(text) {
+    const bytes = new TextEncoder().encode(String(text ?? ""));
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+  function imeListHas(output, id = ADB_IME_ID) {
+    return String(output || "").split(/\r?\n/).map((line) => line.trim()).some((line) => line === id);
+  }
+  function packageListHas(output, pkg = ADB_IME_PACKAGE) {
+    return String(output || "").split(/\r?\n/).some((line) => line.trim() === "package:" + pkg);
+  }
+  function parseCurrentIme(output) {
+    const v = String(output || "").trim();
+    if (!v || v === "null") return "";
+    return v;
+  }
+  var DeviceTextInput = class {
+    constructor(adb) {
+      this.adb = adb || null;
+      this.shell = new AdbShell(adb);
+      this.previousIme = "";
+      this.active = false;
+    }
+    get ready() {
+      return this.shell.ready;
+    }
+    async status() {
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const installedOut = await this.shell.run(["pm", "list", "packages", ADB_IME_PACKAGE], 15e3);
+      const listedOut = await this.shell.run(["ime", "list", "-s"], 15e3);
+      const currentOut = await this.shell.run(["settings", "get", "secure", "default_input_method"], 1e4);
+      const installed = packageListHas(installedOut, ADB_IME_PACKAGE);
+      const enabled = imeListHas(listedOut, ADB_IME_ID);
+      const current = parseCurrentIme(currentOut);
+      return { installed, enabled, current, active: this.active && current === ADB_IME_ID };
+    }
+    async installFromBundle(blob, onProgress) {
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const apps = new DeviceApps(this.adb);
+      return await apps.install(blob, onProgress);
+    }
+    async fetchBundle() {
+      const res = await fetch(ADB_APK_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("\u8BFB\u53D6\u8F93\u5165\u6CD5\u63D2\u4EF6\u5931\u8D25\uFF1A" + res.status);
+      return await res.blob();
+    }
+    async enable() {
+      const out = await this.shell.run(["ime", "enable", ADB_IME_ID], 15e3);
+      if (/Error|Unknown/i.test(out)) throw new Error(out.trim());
+      return out.trim();
+    }
+    /** 切到 ADB 输入法（记住原来的，便于恢复） */
+    async activate() {
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      const current = parseCurrentIme(
+        await this.shell.run(["settings", "get", "secure", "default_input_method"], 1e4)
+      );
+      if (current === ADB_IME_ID) {
+        this.active = true;
+        return;
+      }
+      if (current) this.previousIme = current;
+      const out = await this.shell.run(["ime", "set", ADB_IME_ID], 15e3);
+      if (/Error|Unknown|not.*found/i.test(out)) throw new Error(out.trim());
+      this.active = true;
+    }
+    /** 恢复手机原来的输入法 */
+    async restore() {
+      if (!this.ready) return "";
+      const prev = this.previousIme;
+      this.active = false;
+      if (!prev || prev === ADB_IME_ID) return "";
+      const out = await this.shell.run(["ime", "set", prev], 15e3);
+      this.previousIme = "";
+      return out.trim();
+    }
+    /** 发送整段文字（需先 activate） */
+    async send(text) {
+      const body = String(text ?? "");
+      if (!body) return;
+      if (!this.ready) throw new Error("ADB \u672A\u8FDE\u63A5");
+      if (!this.active) await this.activate();
+      const b64 = utf8ToBase64(body);
+      const out = await this.shell.run(
+        ["am", "broadcast", "-a", "ADB_INPUT_B64", "--es", "msg", b64],
+        15e3
+      );
+      if (/Error/i.test(out)) throw new Error(out.trim());
+      return out.trim();
+    }
+    /** 清空当前输入框内容（可选，用于「替换」场景） */
+    async clearViaKeyevents(count) {
+      const n = Math.max(0, Math.min(200, Number(count) || 0));
+      if (!n) return;
+      const seq = [];
+      for (let i = 0; i < n; i += 1) seq.push("input keyevent 67");
+      await this.shell.sh(seq.join("; "), 3e4);
+    }
+  };
+
   // src/page-mirror.js
   var SETTINGS_KEY = "pandatest-mirror-settings-v1";
+  var IME_AUTO_KEY = "pandatest-ime-auto-v1";
   function $(id) {
     return document.getElementById(id);
   }
@@ -14284,9 +15994,26 @@
       });
     });
   }
+  function scheduleUsbReconnect(reason) {
+    if (mode !== "usb" || usbManualStop || usbStarting) return;
+    if (!usbConnectedAt || Date.now() - usbConnectedAt > 3e4) return;
+    if (usbAutoRetries >= 1) return;
+    usbAutoRetries += 1;
+    clearTimeout(usbRetryTimer);
+    toast("USB \u94FE\u8DEF\u4E2D\u65AD", "\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\uFF0C\u65E0\u9700\u624B\u52A8\u70B9\u5F00\u59CB");
+    logLine("info", "USB \u94FE\u8DEF\u63D0\u524D\u4E2D\u65AD\uFF08" + reason + "\uFF09\uFF0C1.5 \u79D2\u540E\u81EA\u52A8\u91CD\u8FDE 1/1");
+    usbRetryTimer = setTimeout(() => {
+      if (!usbManualStop) startUsb(true, true);
+    }, 1500);
+  }
   var ctrl = null;
   var mode = "usb";
   var wifiKeepAlive = null;
+  var usbManualStop = false;
+  var usbStarting = false;
+  var usbConnectedAt = 0;
+  var usbAutoRetries = 0;
+  var usbRetryTimer = null;
   function setMode(next, silent) {
     mode = next === "wifi" ? "wifi" : "usb";
     all(".mode-card").forEach((b) => {
@@ -14354,8 +16081,8 @@
     } catch {
       liveSize = null;
     }
-    let nw = Number(liveSize?.width) || Number(canvas.width) || Number(canvas.videoWidth) || 0;
-    let nh = Number(liveSize?.height) || Number(canvas.height) || Number(canvas.videoHeight) || 0;
+    let nw = Number(canvas.width) || Number(canvas.videoWidth) || Number(liveSize?.width) || 0;
+    let nh = Number(canvas.height) || Number(canvas.videoHeight) || Number(liveSize?.height) || 0;
     if (!nw || !nh) {
       const res = ($("stat-res")?.textContent || "").match(/(\d+)\s*[x×]\s*(\d+)/i);
       if (res) {
@@ -14507,6 +16234,115 @@
   }
   var _globalRelease = null;
   var _globalVis = null;
+  function bindKeyboardSink(controller, canvas) {
+    const sink = $("key-sink");
+    if (!sink) return;
+    canvas.addEventListener(
+      "pointerdown",
+      () => {
+        setTimeout(() => {
+          try {
+            sink.focus({ preventScroll: true });
+          } catch {
+          }
+        }, 0);
+      },
+      { passive: true }
+    );
+    let buf = "";
+    let timer = null;
+    let composing = false;
+    let skipInput = "";
+    const flush = () => {
+      const text = buf;
+      buf = "";
+      if (text) sendTypedText(text).catch(() => {
+      });
+    };
+    async function sendTypedText(text) {
+      if (!text) return;
+      if (hasNonAscii(text)) {
+        await sendTextSmart(text, { interactive: false });
+        return;
+      }
+      try {
+        await controller.injectText(text);
+      } catch {
+        if (textInput?.active) await textInput.send(text);
+        else throw new Error("\u6587\u672C\u6CE8\u5165\u5931\u8D25");
+      }
+    }
+    sink.addEventListener("compositionstart", () => {
+      composing = true;
+      clearTimeout(timer);
+    });
+    sink.addEventListener("compositionend", (e) => {
+      composing = false;
+      const text = e.data || "";
+      sink.value = "";
+      if (text) {
+        skipInput = text;
+        sendTypedText(text).catch((err) => logLine("error", "IME \u4E0A\u5C4F\u5931\u8D25 " + String(err?.message || err)));
+      }
+    });
+    sink.addEventListener("input", (e) => {
+      if (composing || e.isComposing) return;
+      const text = sink.value || "";
+      sink.value = "";
+      if (!text) return;
+      if (skipInput && text === skipInput) {
+        skipInput = "";
+        return;
+      }
+      sendTypedText(text).catch((err) => logLine("error", "\u8F93\u5165\u5931\u8D25 " + String(err?.message || err)));
+    });
+    sink.addEventListener("keydown", async (e) => {
+      if (e.isComposing || composing) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) await sendTextSmart(text, { interactive: false });
+        } catch (err) {
+          logLine("error", "\u7C98\u8D34\u5230\u624B\u673A\u5931\u8D25 " + String(err?.message || err));
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length === 1) {
+        e.preventDefault();
+        buf += e.key;
+        clearTimeout(timer);
+        timer = setTimeout(flush, 25);
+        return;
+      }
+      const special = {
+        Backspace: () => controller.backspace(),
+        Delete: () => controller.deleteKey(),
+        Enter: () => controller.enter(),
+        Tab: () => controller.tab(),
+        Escape: () => controller.escape(),
+        ArrowUp: () => controller.tapKey(19),
+        ArrowDown: () => controller.tapKey(20),
+        ArrowLeft: () => controller.tapKey(21),
+        ArrowRight: () => controller.tapKey(22),
+        Home: () => controller.tapKey(122),
+        End: () => controller.tapKey(123),
+        PageUp: () => controller.pageUp(),
+        PageDown: () => controller.pageDown()
+      };
+      const fn = special[e.key];
+      if (!fn) return;
+      e.preventDefault();
+      clearTimeout(timer);
+      flush();
+      try {
+        await fn();
+      } catch (err) {
+        logLine("error", "\u6309\u952E\u5931\u8D25 " + e.key + " " + String(err?.message || err));
+      }
+    });
+  }
   function bindControl(controller, canvas) {
     ctrl = controller;
     if (!canvas) return;
@@ -14565,8 +16401,11 @@
     window.addEventListener("blur", _globalRelease);
     document.addEventListener("pointercancel", _globalRelease);
     document.addEventListener("visibilitychange", _globalVis);
+    bindKeyboardSink(controller, canvas);
     fitCanvas();
   }
+  var devicePanels = null;
+  var textInput = null;
   var mirror = new AdbMirror({
     stage: $("stage"),
     status: $("status"),
@@ -14581,13 +16420,29 @@
       const mirroring = text === "\u6295\u5C4F\u4E2D";
       document.body.classList.toggle("mirroring", mirroring);
       if (mirroring) {
+        usbStarting = false;
+        if (mode === "usb") usbConnectedAt = Date.now();
         setStepsDone(3);
         hideOffline();
         if ($("placeholder")) $("placeholder").style.display = "none";
+        devicePanels?.notifyConnected();
+        if (mirror.adb) {
+          textInput = new DeviceTextInput(mirror.adb);
+          refreshImeStatus();
+          setTimeout(refreshImeStatus, 900);
+          setTimeout(autoProvisionIme, 1200);
+        }
       }
       if (text === "\u5DF2\u65AD\u5F00" || text === "\u6295\u5C4F\u5DF2\u7ED3\u675F") {
         document.body.classList.remove("mirroring");
         ctrl = null;
+        if (textInput) {
+          textInput.restore().catch(() => {
+          });
+          textInput = null;
+          refreshImeStatus();
+        }
+        devicePanels?.markDisconnected();
         setStepsDone(0);
         if ($("placeholder")) {
           $("placeholder").style.display = "flex";
@@ -14598,6 +16453,9 @@
         showOffline(
           text === "\u6295\u5C4F\u5DF2\u7ED3\u675F" ? "\u8FDE\u63A5\u5DF2\u7ED3\u675F\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5" : mode === "wifi" ? "\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u4F1A\u81EA\u52A8\u7ED3\u675F scrcpy\uFF0C\u7EA6 10 \u79D2\u5185\u6062\u590D\u624B\u673A\u5916\u653E" : "\u8FDE\u63A5\u5DF2\u65AD\u5F00\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5"
         );
+        if ((text === "\u5DF2\u65AD\u5F00" || text === "\u6295\u5C4F\u5DF2\u7ED3\u675F") && mode === "usb") {
+          scheduleUsbReconnect(text);
+        }
       } else if (text.indexOf("\u94FE\u8DEF\u5DF2\u65AD\u5F00") >= 0) {
         showOffline("\u65E0\u7EBF\u94FE\u8DEF\u5DF2\u65AD\u5F00\uFF0C\u6B63\u5728\u5C1D\u8BD5\u6062\u590D\u624B\u673A\u58F0\u97F3\u2026");
       }
@@ -14611,6 +16469,18 @@
       toast("\u9519\u8BEF", String(err?.message || err));
     },
     onStats(s) {
+      const liveCanvas = document.querySelector("#stage canvas");
+      if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0 && (s.frames ?? 0) > 0) {
+        const cw = Number(liveCanvas.width);
+        const ch = Number(liveCanvas.height);
+        if (cw !== s.width || ch !== s.height) {
+          s = { ...s, width: cw, height: ch };
+          try {
+            mirror._size = { width: cw, height: ch };
+          } catch {
+          }
+        }
+      }
       if ($("stat-res")) {
         const sizeTxt = s.width && s.height ? s.width + "\xD7" + s.height : "\u2014";
         const o = collectOptions();
@@ -14637,6 +16507,11 @@
       bindControl(controller, canvas);
     },
     onLog: (msg) => logLine("log", String(msg))
+  });
+  devicePanels = bindDevicePanels({
+    getMirror: () => mirror,
+    toast,
+    log: logLine
   });
   function showFail(err) {
     console.error(err);
@@ -14803,11 +16678,19 @@
       });
     });
   }
-  async function startUsb(allowAnyMode = false) {
+  async function startUsb(allowAnyMode = false, autoRetry = false) {
     if (!allowAnyMode && mode !== "usb") {
       toast("\u8BF7\u5148\u9009\u62E9 USB \u6A21\u5F0F", "USB \u4E0E\u65E0\u7EBF\u53EA\u80FD\u4E8C\u9009\u4E00");
       return;
     }
+    if (usbStarting) return;
+    if (!autoRetry) {
+      usbManualStop = false;
+      usbAutoRetries = 0;
+      clearTimeout(usbRetryTimer);
+    }
+    usbStarting = true;
+    usbConnectedAt = 0;
     hideOffline();
     const opts = collectOptions();
     const preferSerial = $("usb-device-select")?.value || null;
@@ -14816,17 +16699,35 @@
     if ($("btn-start")) $("btn-start").disabled = true;
     if ($("placeholder-text")) $("placeholder-text").textContent = "USB \u76F4\u8FDE\u4E2D\u2026";
     setStepsDone(1);
+    let adbReleased = false;
     try {
       stopWifiKeepAlive();
       try {
         const resp = await fetch("/api/kill-adb", { method: "POST" });
         const info = await resp.json().catch(() => ({}));
+        adbReleased = info.changed === true;
         logLine("info", "\u91CA\u653E\u672C\u673A adb \u5360\u7528 " + JSON.stringify(info.detail || []));
       } catch {
       }
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      await new Promise((resolve) => setTimeout(resolve, adbReleased ? 3e3 : 1500));
       logLine("info", "\u68C0\u67E5\u5DF2\u6388\u6743 USB \u8BBE\u5907\u2026");
-      await mirror.start(preferSerial, opts);
+      try {
+        await mirror.start(preferSerial, opts);
+      } catch (err) {
+        if (err?.code === "DEVICE_BUSY" && !adbReleased) {
+          logLine("info", "\u68C0\u6D4B\u5230 adb \u5728\u540E\u53F0\u62A2\u5360\u4E86\u63A5\u53E3\uFF0C\u91CA\u653E\u540E\u91CD\u8BD5");
+          try {
+            const resp = await fetch("/api/kill-adb", { method: "POST" });
+            const info = await resp.json().catch(() => ({}));
+            adbReleased = info.changed === true;
+          } catch {
+          }
+          await new Promise((resolve) => setTimeout(resolve, 3e3));
+          await mirror.start(preferSerial, opts);
+        } else {
+          throw err;
+        }
+      }
       if (mirror.device?.serial && $("stat-serial")) {
         $("stat-serial").textContent = "\u8BBE\u5907:" + mirror.device.serial;
       }
@@ -14835,6 +16736,7 @@
     } catch (err) {
       showFail(err);
     } finally {
+      usbStarting = false;
       if ($("btn-start")) $("btn-start").disabled = false;
     }
   }
@@ -14995,6 +16897,8 @@
   on("btn-wireless", "click", connectWifi);
   on("btn-wifi-disconnect", "click", disconnectWifi);
   on("btn-stop", "click", async () => {
+    usbManualStop = true;
+    clearTimeout(usbRetryTimer);
     stopWifiKeepAlive();
     await mirror.stop();
     hideOffline();
@@ -15147,6 +17051,198 @@
     handle.addEventListener("pointerup", end);
     handle.addEventListener("pointercancel", end);
   })();
+  function imeAutoOn() {
+    const box = $("ime-auto");
+    if (box) return box.checked;
+    try {
+      return localStorage.getItem(IME_AUTO_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  }
+  async function autoProvisionIme() {
+    if (!textInput) return;
+    try {
+      let st = await textInput.status();
+      if (!st.installed) {
+        toast("\u9996\u6B21\u8FDE\u63A5\uFF1A\u6B63\u5728\u5B89\u88C5\u4E2D\u6587\u8F93\u5165\u63D2\u4EF6", "\u7EA6 18KB\uFF0C\u88C5\u597D\u540E\u4E2D\u6587\u53EF\u76F4\u63A5\u4E0A\u5C4F");
+        const blob = await textInput.fetchBundle();
+        await textInput.installFromBundle(blob, (p) => {
+          if (p?.total) {
+            const pct = Math.round(p.sent / p.total * 100);
+            if (pct === 100) toast("\u63D2\u4EF6\u5DF2\u63A8\u9001", "\u6B63\u5728\u5B89\u88C5\u2026");
+          }
+        });
+        st = await textInput.status();
+        if (!st.installed) throw new Error("\u63D2\u4EF6\u5B89\u88C5\u540E\u672A\u68C0\u6D4B\u5230");
+      }
+      if (!st.enabled) await textInput.enable();
+      if (imeAutoOn()) await textInput.activate();
+      await refreshImeStatus();
+      logLine("ok", "IME \u81EA\u52A8\u914D\u7F6E\u5B8C\u6210 installed=" + st.installed + " auto=" + imeAutoOn());
+    } catch (e) {
+      logLine("error", "IME \u81EA\u52A8\u914D\u7F6E\u5931\u8D25 " + String(e?.message || e));
+      toast("\u4E2D\u6587\u8F93\u5165\u81EA\u52A8\u914D\u7F6E\u5931\u8D25", String(e?.message || e) + "\uFF0C\u53EF\u5728\u6587\u672C\u6846\u91CC\u624B\u52A8\u542F\u7528");
+      refreshImeStatus();
+    }
+  }
+  async function refreshImeStatus() {
+    const label = $("ime-status");
+    const setup = $("btn-ime-setup");
+    const restore = $("btn-ime-restore");
+    if (!label) return;
+    if (!textInput && mirror.adb) textInput = new DeviceTextInput(mirror.adb);
+    if (!textInput) {
+      label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u672A\u8FDE\u63A5\u8BBE\u5907";
+      if (setup) {
+        setup.disabled = true;
+        setup.hidden = true;
+      }
+      if (restore) restore.hidden = true;
+      return;
+    }
+    try {
+      const st = await textInput.status();
+      const inUse = st.current === ADB_IME_ID;
+      if (!st.installed) {
+        label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u672A\u5B89\u88C5\u63D2\u4EF6";
+        if (setup) {
+          setup.disabled = false;
+          setup.hidden = false;
+          setup.textContent = "\u5B89\u88C5\u4E2D\u6587\u8F93\u5165\u63D2\u4EF6";
+        }
+      } else if (!st.enabled) {
+        label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u63D2\u4EF6\u672A\u542F\u7528";
+        if (setup) {
+          setup.disabled = false;
+          setup.hidden = false;
+          setup.textContent = "\u542F\u7528\u63D2\u4EF6";
+        }
+      } else if (inUse) {
+        label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u4F7F\u7528\u4E2D\uFF08ADB \u8F93\u5165\u6CD5\uFF09";
+        if (setup) {
+          setup.disabled = true;
+          setup.hidden = true;
+        }
+      } else {
+        label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u53EF\u7528";
+        if (setup) {
+          setup.disabled = false;
+          setup.hidden = false;
+          setup.textContent = "\u5207\u6362\u5230 ADB \u8F93\u5165\u6CD5";
+        }
+      }
+      if (restore) restore.hidden = !inUse;
+    } catch (e) {
+      label.textContent = "\u4E2D\u6587\u8F93\u5165\uFF1A\u68C0\u6D4B\u5931\u8D25";
+      if (setup) {
+        setup.disabled = false;
+        setup.hidden = false;
+        setup.textContent = "\u91CD\u8BD5";
+      }
+    }
+  }
+  async function ensureChineseInput({ interactive = false } = {}) {
+    if (!textInput) throw new Error("\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907");
+    let st = await textInput.status();
+    if (!st.installed) {
+      if (interactive && !confirm("\u4E2D\u6587\u8F93\u5165\u9700\u8981\u5728\u624B\u673A\u4E0A\u88C5\u4E00\u4E2A\u5F00\u6E90\u8F93\u5165\u6CD5\u63D2\u4EF6 ADBKeyboard\uFF08\u7EA6 18KB\uFF0CGPL-2.0\uFF09\u3002\u5B89\u88C5\u5E76\u542F\u7528\uFF1F")) {
+        throw new Error("\u5DF2\u53D6\u6D88\u5B89\u88C5\u4E2D\u6587\u8F93\u5165\u63D2\u4EF6");
+      }
+      toast("\u6B63\u5728\u5B89\u88C5\u4E2D\u6587\u8F93\u5165\u63D2\u4EF6", "\u7EA6 18KB\uFF0C\u53EA\u4F1A\u7528\u6765\u628A\u7535\u8111\u4E0A\u7684\u5B57\u9001\u8FDB\u624B\u673A\u8F93\u5165\u6846");
+      const blob = await textInput.fetchBundle();
+      await textInput.installFromBundle(blob, (p) => {
+        if (p?.phase === "install") toast("\u6B63\u5728\u5B89\u88C5\u63D2\u4EF6", "APK \u5DF2\u63A8\u9001\uFF0C\u6B63\u5728\u5B89\u88C5\u2026");
+        else if (p?.total) {
+          const pct = Math.round(p.sent / p.total * 100);
+          if (pct === 100 || pct % 20 === 0) toast("\u6B63\u5728\u63A8\u9001\u63D2\u4EF6", pct + "%");
+        }
+      });
+      st = await textInput.status();
+      if (!st.installed) throw new Error("\u63D2\u4EF6\u5B89\u88C5\u540E\u4ECD\u672A\u68C0\u6D4B\u5230\uFF0C\u8BF7\u91CD\u8BD5");
+    }
+    if (!st.enabled) await textInput.enable();
+    await textInput.activate();
+    await refreshImeStatus();
+    if (textInput.active) {
+      toast("\u4E2D\u6587\u8F93\u5165\u5DF2\u5C31\u7EEA", "\u624B\u673A\u5DF2\u5207\u5230 ADB \u8F93\u5165\u6CD5\uFF1B\u4E0D\u7528\u65F6\u70B9\u300C\u6062\u590D\u624B\u673A\u8F93\u5165\u6CD5\u300D");
+    }
+    return true;
+  }
+  async function sendTextSmart(text, { interactive = false } = {}) {
+    const body = String(text ?? "");
+    if (!body || !ctrl) return false;
+    if (!hasNonAscii(body)) {
+      await ctrl.injectText(body);
+      return true;
+    }
+    try {
+      await ensureChineseInput({ interactive });
+      await textInput.send(body);
+      toast("\u5DF2\u4E0A\u5C4F", body.length > 20 ? body.slice(0, 20) + "\u2026" : body);
+      return true;
+    } catch (e) {
+      if (!interactive) {
+        try {
+          await ctrl.setClipboardAndPaste(body);
+          toast("\u4E2D\u6587\u5DF2\u5C1D\u8BD5\u8D70\u526A\u8D34\u677F", "\u82E5\u6CA1\u4E0A\u5C4F\uFF0C\u70B9\u300C\u5B89\u88C5\u4E2D\u6587\u8F93\u5165\u63D2\u4EF6\u300D\u53EF\u5F7B\u5E95\u89E3\u51B3");
+          return true;
+        } catch {
+        }
+      }
+      toast("\u4E2D\u6587\u53D1\u9001\u5931\u8D25", String(e?.message || e));
+      logLine("error", "chinese send fail " + String(e?.message || e));
+      return false;
+    }
+  }
+  on("btn-ime-setup", "click", async () => {
+    try {
+      await ensureChineseInput({ interactive: true });
+    } catch (e) {
+      toast("\u542F\u7528\u5931\u8D25", String(e?.message || e));
+      logLine("error", "ime setup fail " + String(e?.message || e));
+    }
+    refreshImeStatus();
+  });
+  on("btn-ime-restore", "click", async () => {
+    try {
+      await textInput?.restore();
+      toast("\u5DF2\u6062\u590D\u624B\u673A\u8F93\u5165\u6CD5");
+    } catch (e) {
+      toast("\u6062\u590D\u5931\u8D25", String(e?.message || e));
+    }
+    refreshImeStatus();
+  });
+  (function bindImeAuto() {
+    const box = $("ime-auto");
+    if (!box) return;
+    try {
+      box.checked = localStorage.getItem(IME_AUTO_KEY) !== "0";
+    } catch {
+    }
+    box.addEventListener("change", () => {
+      try {
+        localStorage.setItem(IME_AUTO_KEY, box.checked ? "1" : "0");
+      } catch {
+      }
+      if (box.checked) {
+        toast("\u5DF2\u5F00\u542F", "\u4E0B\u6B21\u8FDE\u63A5\u4F1A\u81EA\u52A8\u5B89\u88C5\u5E76\u542F\u7528\u4E2D\u6587\u8F93\u5165");
+      } else {
+        toast("\u5DF2\u5173\u95ED\u81EA\u52A8\u542F\u7528", "\u63D2\u4EF6\u4ECD\u4F1A\u5B89\u88C5\uFF0C\u4F46\u4E0D\u4F1A\u5207\u6362\u624B\u673A\u8F93\u5165\u6CD5");
+        textInput?.restore().then(refreshImeStatus).catch(() => {
+        });
+      }
+    });
+  })();
+  if (location.search.includes("debug")) {
+    window.__ime = {
+      status: () => textInput ? textInput.status() : Promise.resolve(null),
+      shell: (argv) => mirror.adb?.subprocess?.noneProtocol?.spawnWaitText(argv),
+      activate: () => ensureChineseInput({ interactive: false }),
+      restore: () => textInput ? textInput.restore() : Promise.resolve("")
+    };
+    window.__ctrl = () => ctrl;
+  }
   (function bindLiveTextInput() {
     const input = $("clipboard-input");
     if (!input) return;
@@ -15156,10 +17252,8 @@
     async function sendAdd(add) {
       if (!ctrl || !add) return;
       try {
-        const hasCjk = /[^\x00-\xff]/.test(add);
-        if (hasCjk) await ctrl.setClipboardAndPaste(add);
-        else await ctrl.injectText(add);
-        logLine("ok", "auto input: " + add);
+        const ok = await sendTextSmart(add, { interactive: false });
+        logLine(ok ? "ok" : "error", "auto input: " + add);
       } catch (e) {
         logLine("error", "auto input fail " + String(e?.message || e));
       }
@@ -15235,17 +17329,12 @@
     const text = String($("clipboard-input")?.value ?? "");
     if (!text || !ctrl) return toast(text ? "\u8BF7\u5148\u8FDE\u63A5\u8BBE\u5907" : "\u8BF7\u5148\u8F93\u5165\u6587\u672C");
     try {
-      const hasCjk = /[^\x00-\xff]/.test(text);
-      if (hasCjk) {
-        await ctrl.setClipboardAndPaste(text);
-        toast("\u5DF2\u4E0A\u5C4F", "\u4E2D\u6587\u8D70\u526A\u8D34\u677F\u7C98\u8D34");
-      } else {
-        await ctrl.injectText(text);
-        toast("\u5DF2\u4E0A\u5C4F");
+      const ok = await sendTextSmart(text, { interactive: true });
+      if (ok) {
+        logLine("ok", "send text len=" + text.length + (hasNonAscii(text) ? " non-ascii" : ""));
+        const box = $("clipboard-input");
+        if (box) box.value = "";
       }
-      logLine("ok", "send text len=" + text.length + (hasCjk ? " cjk" : ""));
-      const box = $("clipboard-input");
-      if (box) box.value = "";
     } catch (e) {
       logLine("error", "send text fail " + String(e?.message || e));
       toast("\u53D1\u9001\u5931\u8D25", String(e?.message || e));
@@ -15310,10 +17399,8 @@
     async function sendAdd(add) {
       if (!ctrl || !add) return;
       try {
-        const hasCjk = /[^\x00-\xff]/.test(add);
-        if (hasCjk) await ctrl.setClipboardAndPaste(add);
-        else await ctrl.injectText(add);
-        logLine("ok", "fs auto: " + add);
+        const ok = await sendTextSmart(add, { interactive: false });
+        logLine(ok ? "ok" : "error", "fs auto: " + add);
       } catch (e) {
         logLine("error", "fs auto fail " + String(e?.message || e));
       }
@@ -15351,12 +17438,10 @@
         return;
       }
       try {
-        const hasCjk = /[^\x00-\xff]/.test(text);
-        if (hasCjk) await ctrl.setClipboardAndPaste(text);
-        else await ctrl.injectText(text);
+        const ok = await sendTextSmart(text, { interactive: true });
+        if (!ok) return;
         box.value = "";
         last = "";
-        toast("\u5DF2\u4E0A\u5C4F");
         logLine("ok", "fs send " + text.length);
       } catch (e) {
         logLine("error", "fs send " + String(e?.message || e));
@@ -15382,6 +17467,10 @@
   window.addEventListener("resize", fitCanvas);
   window.addEventListener("beforeunload", saveSettings);
   window.addEventListener("pagehide", () => {
+    try {
+      textInput?.restore();
+    } catch {
+    }
     try {
       mirror.stop();
     } catch {
