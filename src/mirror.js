@@ -250,6 +250,40 @@ export class AdbMirror {
     this._lateTimer = null;
     this._lateActive = false;
     this.muted = false;
+    // v4.0.23：无线投屏时 scrcpy 的 stay_awake 依赖“插电常亮”，手机没插电仍会息屏。
+    // 这里在投屏期间临时把系统息屏时间拉到最大，停止/断线时恢复，避免把用户设置改坏。
+    this._awakeSaved = null;
+    this._awakeApplied = false;
+  }
+
+  /** 息屏时间快照的本地键：按设备序列号区分，页面被关闭后下次连接仍能补恢复 */
+  _awakeStoreKey() {
+    const id = String(this._wirelessTarget || this.device?.serial || "").trim();
+    return id ? "scrcpy-awake-timeout:" + id : "";
+  }
+
+  _readAwakeStored() {
+    const key = this._awakeStoreKey();
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      const n = Number(raw);
+      return raw != null && Number.isFinite(n) && n >= 0 ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  _writeAwakeStored(value) {
+    const key = this._awakeStoreKey();
+    if (!key) return;
+    try { localStorage.setItem(key, String(value)); } catch { /* 隐私模式忽略 */ }
+  }
+
+  _clearAwakeStored() {
+    const key = this._awakeStoreKey();
+    if (!key) return;
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
   status(text) {
@@ -617,6 +651,85 @@ export class AdbMirror {
   }
 
   /**
+   * v4.0.23 无线强制常亮。
+   *
+   * scrcpy 的 stay_awake 只改“插电时常亮”（stay_on_while_plugged_in），
+   * 无线投屏时手机没有 AC/USB/Wireless 供电，系统仍按 screen_off_timeout 息屏。
+   * 因此投屏期间临时把息屏时间设为最大值，并主动唤醒一次；原值保存在 _awakeSaved，
+   * 由 stop / cleanupAfterDrop / _cleanupFailedStart 统一恢复。
+   */
+  async applyWirelessAwake() {
+    if (!this._opts?.stayAwake || this._awakeApplied || !this.adb) return false;
+    try {
+      const raw = String((await this.deviceShell("settings get system screen_off_timeout", 6000)) || "").trim();
+      let original = Number(raw);
+      // 上次页面被直接关闭/服务被停止，恢复命令没发出去：下次连接先把快照补回去。
+      const stored = this._readAwakeStored();
+      if (stored != null) {
+        if (Number.isFinite(original) && original >= 2000000000) {
+          await this.deviceShell("settings put system screen_off_timeout " + stored, 6000);
+          original = stored;
+          this.onLog("检测到上次投屏未恢复息屏时间，已先补回 " + Math.round(stored / 1000) + " 秒");
+        }
+        this._clearAwakeStored();
+      }
+      if (!Number.isFinite(original) || original < 0 || original >= 2000000000) {
+        this._awakeSaved = null;
+      } else {
+        this._awakeSaved = original;
+        this._writeAwakeStored(original);
+      }
+      this._awakeApplied = true;
+      await this.deviceShell(
+        "settings put system screen_off_timeout 2147483647; input keyevent 224 2>/dev/null; true",
+        8000
+      );
+      this.onLog(
+        this._awakeSaved == null
+          ? "已开启投屏强制常亮（原息屏时间未知或已是最大值，停止后无法自动恢复）"
+          : "已开启投屏强制常亮（原息屏 " + Math.round(this._awakeSaved / 1000) + " 秒，停止后恢复）"
+      );
+      return true;
+    } catch (e) {
+      this.onLog("强制常亮设置失败 " + (e?.message || e));
+      return false;
+    }
+  }
+
+  async restoreWirelessAwake() {
+    const saved = this._awakeSaved ?? this._readAwakeStored();
+    if (!this._awakeApplied && saved == null) return true;
+    if (saved == null || !this.adb) {
+      this.onLog(
+        saved == null
+          ? "未能恢复息屏时间：原值未记录（可能上次页面被直接关闭）"
+          : "未能恢复息屏时间：ADB 已断开，快照已保留，下次连接会自动补恢复"
+      );
+      return false;
+    }
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        await this.deviceShell("settings put system screen_off_timeout " + saved, 6000);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const nowRaw = String((await this.deviceShell("settings get system screen_off_timeout", 6000)) || "").trim();
+        const now = Number(nowRaw);
+        if (Number.isFinite(now) && now === saved) {
+          this._awakeApplied = false;
+          this._awakeSaved = null;
+          this._clearAwakeStored();
+          this.onLog("已恢复手机息屏时间 " + Math.round(saved / 1000) + " 秒");
+          return true;
+        }
+        this.onLog("恢复息屏时间校验不一致（第 " + attempt + " 次）：期望 " + saved + "，实际 " + (nowRaw || "无回显"));
+      } catch (e) {
+        this.onLog("恢复息屏时间失败（第 " + attempt + " 次）：" + (e?.message || e));
+      }
+    }
+    this.onLog("息屏时间仍未恢复，已保留快照；下次连接设备时会自动补恢复");
+    return false;
+  }
+
+  /**
    * 手机端看门狗（v4.0.12 起重新收敛为单一职责）：
    *
    *   无线会话失联  →  结束手机端 scrcpy、释放音频采集  →  自己退出
@@ -846,6 +959,7 @@ export class AdbMirror {
       const glog = await this.readAudioGuardLog(8);
       if (glog) this.onLog("看门狗日志：" + glog.replace(/\n/g, " | "));
       const ok = await this.releaseSessionOnDevice();
+      await this.restoreWirelessAwake();
       this.onLog(ok ? "已结束手机端 scrcpy 并刷新音频路由" : "未能结束手机端 scrcpy，音频可能仍被占用");
       return ok;
     } catch (e) {
@@ -972,10 +1086,13 @@ export class AdbMirror {
     }
     this.audio = new AudioMirror();
     // 链路还活着时直接清；已断则只能靠手机端看门狗/重连后清
+    await this.restoreWirelessAwake();
     await this.releaseScrcpyOnDevice();
     if (this._wirelessTarget) {
       this.status("无线已断开，正在恢复手机声音…");
       const ok = await this.restoreWirelessAudio();
+      // 重连成功后 ADB 又可用，补一次息屏时间恢复（第一次可能因断网失败）
+      await this.restoreWirelessAwake();
       if (ok) {
         this.onLog("手机声音已恢复");
       } else {
@@ -1185,9 +1302,11 @@ export class AdbMirror {
       version: "5.0.1",
     });
     const serializeOptions = options.serialize.bind(options);
+    // 不能用 @：@ 会锁定连接瞬间的方向，横屏应用启动后会被塞回竖屏并侧转 90°。
+    // 传 0 表示不做额外旋转，由 scrcpy server 跟随设备当前方向重新编码。
     options.serialize = () => serializeOptions()
       .filter((line) => !line.startsWith("send_codec_meta="))
-      .concat("send_stream_meta=false");
+      .concat("send_stream_meta=false", "capture_orientation=0");
     if (isCam) {
       try {
         options.value.cameraId = source === "camera_front" ? "1" : "0";
@@ -1232,6 +1351,9 @@ export class AdbMirror {
 
     const videoStream = await this.client.videoStream;
     if (!videoStream) throw new MirrorError("scrcpy 未返回视频流", "NO_VIDEO");
+
+    // v4.0.23：视频流就绪后再改息屏时间，启动失败不会留下被改过的系统设置。
+    await this.applyWirelessAwake();
 
     const { metadata, stream: packetStream } = videoStream;
     this._size = {
@@ -1392,6 +1514,9 @@ export class AdbMirror {
       this._lateTimer = null;
     }
     this._lateActive = false;
+    // v4.2.2：先把息屏时间恢复掉，再去做可能超时的收尾。
+    // 旧顺序把它放在最后，「停止服务」只等 3 秒时会被直接截断，手机就停在最大值。
+    await this.restoreWirelessAwake();
     try {
       await this.deviceController?.dispose();
     } catch {
@@ -1423,6 +1548,7 @@ export class AdbMirror {
     } catch {
       /* ignore */
     }
+    await this.restoreWirelessAwake();
     try { await this._wirelessDispose?.(); } catch { /* ignore */ }
     this._wirelessDispose = null;
     this.adb = null;
@@ -1445,6 +1571,7 @@ export class AdbMirror {
       /* ignore */
     }
     this.client = null;
+    await this.restoreWirelessAwake();
     try {
       await this.adb?.close();
     } catch {

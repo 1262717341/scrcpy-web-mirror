@@ -13,8 +13,11 @@ import {
   wirelessHelp,
   WirelessError,
 } from "../src/wireless.js";
+import { bindDevicePanels } from "./device-panel.js";
+import { ADB_IME_ID, DeviceTextInput, hasNonAscii } from "./text-input.js";
 
 const SETTINGS_KEY = "pandatest-mirror-settings-v1";
+const IME_AUTO_KEY = "pandatest-ime-auto-v1";
 
 function $(id) {
   return document.getElementById(id);
@@ -249,9 +252,28 @@ function bindSettingsSaver() {
   });
 }
 
+function scheduleUsbReconnect(reason) {
+  if (mode !== "usb" || usbManualStop || usbStarting) return;
+  if (!usbConnectedAt || Date.now() - usbConnectedAt > 30000) return;
+  if (usbAutoRetries >= 1) return;
+  usbAutoRetries += 1;
+  clearTimeout(usbRetryTimer);
+  toast("USB 链路中断", "正在自动重连，无需手动点开始");
+  logLine("info", "USB 链路提前中断（" + reason + "），1.5 秒后自动重连 1/1");
+  usbRetryTimer = setTimeout(() => {
+    if (!usbManualStop) startUsb(true, true);
+  }, 1500);
+}
+
 let ctrl = null;
 let mode = "usb";
 let wifiKeepAlive = null;
+// v4.2.5：USB 过早掉流的自动恢复状态
+let usbManualStop = false;
+let usbStarting = false;
+let usbConnectedAt = 0;
+let usbAutoRetries = 0;
+let usbRetryTimer = null;
 
 function setMode(next, silent) {
   mode = next === "wifi" ? "wifi" : "usb";
@@ -326,11 +348,12 @@ function fitCanvas() {
     !!document.fullscreenElement ||
     !!$("mirror-layout")?.classList.contains("is-fullscreen");
 
-  // 比例优先取设备真实帧尺寸（mirror._size），其次画布内部分辨率，最后读状态文本兜底
+  // 比例以解码器画布实际帧尺寸为准：横竖屏切换时画布会立即变成新方向，
+  // 而 mirror._size 只在配置包更新时才刷新，优先读 _size 会让画面被拉成旧方向。
   let liveSize = null;
   try { liveSize = mirror._size; } catch { liveSize = null; }
-  let nw = Number(liveSize?.width) || Number(canvas.width) || Number(canvas.videoWidth) || 0;
-  let nh = Number(liveSize?.height) || Number(canvas.height) || Number(canvas.videoHeight) || 0;
+  let nw = Number(canvas.width) || Number(canvas.videoWidth) || Number(liveSize?.width) || 0;
+  let nh = Number(canvas.height) || Number(canvas.videoHeight) || Number(liveSize?.height) || 0;
   if (!nw || !nh) {
     const res = ($("stat-res")?.textContent || "").match(/(\d+)\s*[x×]\s*(\d+)/i);
     if (res) {
@@ -502,6 +525,133 @@ function runAct(act) {
 let _globalRelease = null;
 let _globalVis = null;
 
+/* ---------- 投屏画布键盘：物理键盘 / 中文输入法 ---------- */
+function bindKeyboardSink(controller, canvas) {
+  const sink = $("key-sink");
+  if (!sink) return;
+
+  // 点画面时把焦点交给透明输入槽，后续按键才会进到这里
+  canvas.addEventListener(
+    "pointerdown",
+    () => {
+      // 延迟到浏览器默认的“点击失焦”之后，再把焦点交回键盘槽
+      setTimeout(() => {
+        try {
+          sink.focus({ preventScroll: true });
+        } catch {
+          /* ignore */
+        }
+      }, 0);
+    },
+    { passive: true }
+  );
+
+  let buf = "";
+  let timer = null;
+  let composing = false;
+  let skipInput = "";
+
+  const flush = () => {
+    const text = buf;
+    buf = "";
+    if (text) sendTypedText(text).catch(() => {});
+  };
+
+  async function sendTypedText(text) {
+    if (!text) return;
+    // 中文、emoji 必须走输入法 commit；纯 ASCII 优先走 scrcpy 文本注入（不破坏游戏按键）
+    if (hasNonAscii(text)) {
+      await sendTextSmart(text, { interactive: false });
+      return;
+    }
+    try {
+      await controller.injectText(text);
+    } catch {
+      if (textInput?.active) await textInput.send(text);
+      else throw new Error("文本注入失败");
+    }
+  }
+
+  sink.addEventListener("compositionstart", () => {
+    composing = true;
+    clearTimeout(timer);
+  });
+
+  sink.addEventListener("compositionend", (e) => {
+    composing = false;
+    const text = e.data || "";
+    sink.value = "";
+    if (text) {
+      skipInput = text;
+      sendTypedText(text).catch((err) => logLine("error", "IME 上屏失败 " + String(err?.message || err)));
+    }
+  });
+
+  // insertText / 语音输入等不经过 keydown 的路径
+  sink.addEventListener("input", (e) => {
+    if (composing || e.isComposing) return;
+    const text = sink.value || "";
+    sink.value = "";
+    if (!text) return;
+    if (skipInput && text === skipInput) {
+      skipInput = "";
+      return;
+    }
+    sendTypedText(text).catch((err) => logLine("error", "输入失败 " + String(err?.message || err)));
+  });
+
+  sink.addEventListener("keydown", async (e) => {
+    if (e.isComposing || composing) return;
+
+    // Ctrl+V：把电脑剪贴板内容送到手机
+    if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+      e.preventDefault();
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) await sendTextSmart(text, { interactive: false });
+      } catch (err) {
+        logLine("error", "粘贴到手机失败 " + String(err?.message || err));
+      }
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key.length === 1) {
+      e.preventDefault();
+      buf += e.key;
+      clearTimeout(timer);
+      timer = setTimeout(flush, 25);
+      return;
+    }
+
+    const special = {
+      Backspace: () => controller.backspace(),
+      Delete: () => controller.deleteKey(),
+      Enter: () => controller.enter(),
+      Tab: () => controller.tab(),
+      Escape: () => controller.escape(),
+      ArrowUp: () => controller.tapKey(19),
+      ArrowDown: () => controller.tapKey(20),
+      ArrowLeft: () => controller.tapKey(21),
+      ArrowRight: () => controller.tapKey(22),
+      Home: () => controller.tapKey(122),
+      End: () => controller.tapKey(123),
+      PageUp: () => controller.pageUp(),
+      PageDown: () => controller.pageDown(),
+    };
+    const fn = special[e.key];
+    if (!fn) return;
+    e.preventDefault();
+    clearTimeout(timer);
+    flush();
+    try {
+      await fn();
+    } catch (err) {
+      logLine("error", "按键失败 " + e.key + " " + String(err?.message || err));
+    }
+  });
+}
+
 function bindControl(controller, canvas) {
   ctrl = controller;
   if (!canvas) return;
@@ -562,9 +712,12 @@ function bindControl(controller, canvas) {
   document.addEventListener("pointercancel", _globalRelease);
   document.addEventListener("visibilitychange", _globalVis);
 
+  bindKeyboardSink(controller, canvas);
   fitCanvas();
 }
 
+let devicePanels = null;
+let textInput = null;
 const mirror = new AdbMirror({
   stage: $("stage"),
   status: $("status"),
@@ -580,13 +733,28 @@ const mirror = new AdbMirror({
     const mirroring = text === "投屏中";
     document.body.classList.toggle("mirroring", mirroring);
     if (mirroring) {
+      usbStarting = false;
+      if (mode === "usb") usbConnectedAt = Date.now();
       setStepsDone(3);
       hideOffline();
       if ($("placeholder")) $("placeholder").style.display = "none";
+      devicePanels?.notifyConnected();
+      if (mirror.adb) {
+        textInput = new DeviceTextInput(mirror.adb);
+        refreshImeStatus();
+        setTimeout(refreshImeStatus, 900);
+        setTimeout(autoProvisionIme, 1200);
+      }
     }
     if (text === "已断开" || text === "投屏已结束") {
       document.body.classList.remove("mirroring");
       ctrl = null;
+      if (textInput) {
+        textInput.restore().catch(() => {});
+        textInput = null;
+        refreshImeStatus();
+      }
+      devicePanels?.markDisconnected();
       setStepsDone(0);
       // 断开即无画面：清掉舞台内容，恢复占位符（v3.0.17 起不再保留冻结帧）
       if ($("placeholder")) {
@@ -603,6 +771,9 @@ const mirror = new AdbMirror({
             ? "无线已断开：手机端看门狗会自动结束 scrcpy，约 10 秒内恢复手机外放"
             : "连接已断开，可重新连接"
       );
+      if ((text === "已断开" || text === "投屏已结束") && mode === "usb") {
+        scheduleUsbReconnect(text);
+      }
     } else if (text.indexOf("链路已断开") >= 0) {
       showOffline("无线链路已断开，正在尝试恢复手机声音…");
     }
@@ -616,6 +787,17 @@ const mirror = new AdbMirror({
     toast("错误", String(err?.message || err));
   },
   onStats(s) {
+    // 解码器画布是方向变化的第一现场：横竖屏切换后先用画布尺寸纠正 _size，
+    // 再刷新状态栏，避免底部一直显示旧方向的分辨率。
+    const liveCanvas = document.querySelector("#stage canvas");
+    if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0 && (s.frames ?? 0) > 0) {
+      const cw = Number(liveCanvas.width);
+      const ch = Number(liveCanvas.height);
+      if (cw !== s.width || ch !== s.height) {
+        s = { ...s, width: cw, height: ch };
+        try { mirror._size = { width: cw, height: ch }; } catch { /* mirror 可能尚未就绪 */ }
+      }
+    }
     if ($("stat-res")) {
       const sizeTxt = s.width && s.height ? s.width + "×" + s.height : "—";
       const o = collectOptions();
@@ -643,6 +825,12 @@ const mirror = new AdbMirror({
     bindControl(controller, canvas);
   },
   onLog: (msg) => logLine("log", String(msg)),
+});
+
+devicePanels = bindDevicePanels({
+  getMirror: () => mirror,
+  toast,
+  log: logLine,
 });
 
 function showFail(err) {
@@ -875,11 +1063,19 @@ async function waitForUsbAuthorization(timeoutMs = 30000) {
   return false;
 }
 
-async function startUsb(allowAnyMode = false) {
+async function startUsb(allowAnyMode = false, autoRetry = false) {
   if (!allowAnyMode && mode !== "usb") {
     toast("请先选择 USB 模式", "USB 与无线只能二选一");
     return;
   }
+  if (usbStarting) return;
+  if (!autoRetry) {
+    usbManualStop = false;
+    usbAutoRetries = 0;
+    clearTimeout(usbRetryTimer);
+  }
+  usbStarting = true;
+  usbConnectedAt = 0;
   hideOffline();
   const opts = collectOptions();
   const preferSerial = $("usb-device-select")?.value || null;
@@ -888,20 +1084,40 @@ async function startUsb(allowAnyMode = false) {
   if ($("btn-start")) $("btn-start").disabled = true;
   if ($("placeholder-text")) $("placeholder-text").textContent = "USB 直连中…";
   setStepsDone(1);
+  let adbReleased = false;
   try {
     stopWifiKeepAlive();
-    // 本机官方 adb 会独占 USB 接口；先释放，浏览器才能直接接管已授权设备
+    // 只有 adb server 真在运行时才让它退出；空跑 kill-server 会触发 USB 重新枚举
     try {
       const resp = await fetch("/api/kill-adb", { method: "POST" });
       const info = await resp.json().catch(() => ({}));
+      adbReleased = info.changed === true;
       logLine("info", "释放本机 adb 占用 " + JSON.stringify(info.detail || []));
     } catch {
       /* 没有占用时忽略 */
     }
-    // taskkill 返回后 Windows 还要一点时间释放 USB 接口；立刻 claim 会报 DeviceBusy
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    // 即使 adb 没在运行，上一次 WebUSB 句柄释放后 Windows 也需要短暂稳定期。
+    // 真正停过 adb server 时等待更久，避免 USB 重新枚举把刚建立的链路重置。
+    await new Promise((resolve) => setTimeout(resolve, adbReleased ? 3000 : 1500));
     logLine("info", "检查已授权 USB 设备…");
-    await mirror.start(preferSerial, opts);
+    try {
+      await mirror.start(preferSerial, opts);
+    } catch (err) {
+      if (err?.code === "DEVICE_BUSY" && !adbReleased) {
+        logLine("info", "检测到 adb 在后台抢占了接口，释放后重试");
+        try {
+          const resp = await fetch("/api/kill-adb", { method: "POST" });
+          const info = await resp.json().catch(() => ({}));
+          adbReleased = info.changed === true;
+        } catch {
+          /* ignore */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await mirror.start(preferSerial, opts);
+      } else {
+        throw err;
+      }
+    }
     if (mirror.device?.serial && $("stat-serial")) {
       $("stat-serial").textContent = "设备:" + mirror.device.serial;
     }
@@ -910,6 +1126,7 @@ async function startUsb(allowAnyMode = false) {
   } catch (err) {
     showFail(err);
   } finally {
+    usbStarting = false;
     if ($("btn-start")) $("btn-start").disabled = false;
   }
 }
@@ -1093,6 +1310,8 @@ on("btn-wireless", "click", connectWifi);
 on("btn-wifi-disconnect", "click", disconnectWifi);
 
 on("btn-stop", "click", async () => {
+  usbManualStop = true;
+  clearTimeout(usbRetryTimer);
   stopWifiKeepAlive();
   await mirror.stop();
   hideOffline();
@@ -1268,6 +1487,195 @@ all("[data-act]").forEach((el) => {
   handle.addEventListener("pointercancel", end);
 })();
 
+/* ---------- 中文输入：ADBKeyboard 输入法插件 ---------- */
+function imeAutoOn() {
+  const box = $("ime-auto");
+  if (box) return box.checked;
+  try {
+    return localStorage.getItem(IME_AUTO_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 连接成功后自动配置：缺插件就装、没启用就启用、按设置切到 ADB 输入法。
+ * 失败只记日志，不影响投屏；文本框发送仍是兜底。
+ */
+async function autoProvisionIme() {
+  if (!textInput) return;
+  try {
+    let st = await textInput.status();
+    if (!st.installed) {
+      toast("首次连接：正在安装中文输入插件", "约 18KB，装好后中文可直接上屏");
+      const blob = await textInput.fetchBundle();
+      await textInput.installFromBundle(blob, (p) => {
+        if (p?.total) {
+          const pct = Math.round((p.sent / p.total) * 100);
+          if (pct === 100) toast("插件已推送", "正在安装…");
+        }
+      });
+      st = await textInput.status();
+      if (!st.installed) throw new Error("插件安装后未检测到");
+    }
+    if (!st.enabled) await textInput.enable();
+    if (imeAutoOn()) await textInput.activate();
+    await refreshImeStatus();
+    logLine("ok", "IME 自动配置完成 installed=" + st.installed + " auto=" + imeAutoOn());
+  } catch (e) {
+    logLine("error", "IME 自动配置失败 " + String(e?.message || e));
+    toast("中文输入自动配置失败", String(e?.message || e) + "，可在文本框里手动启用");
+    refreshImeStatus();
+  }
+}
+
+async function refreshImeStatus() {
+  const label = $("ime-status");
+  const setup = $("btn-ime-setup");
+  const restore = $("btn-ime-restore");
+  if (!label) return;
+  if (!textInput && mirror.adb) textInput = new DeviceTextInput(mirror.adb);
+  if (!textInput) {
+    label.textContent = "中文输入：未连接设备";
+    if (setup) { setup.disabled = true; setup.hidden = true; }
+    if (restore) restore.hidden = true;
+    return;
+  }
+  try {
+    const st = await textInput.status();
+    const inUse = st.current === ADB_IME_ID;
+    if (!st.installed) {
+      label.textContent = "中文输入：未安装插件";
+      if (setup) { setup.disabled = false; setup.hidden = false; setup.textContent = "安装中文输入插件"; }
+    } else if (!st.enabled) {
+      label.textContent = "中文输入：插件未启用";
+      if (setup) { setup.disabled = false; setup.hidden = false; setup.textContent = "启用插件"; }
+    } else if (inUse) {
+      label.textContent = "中文输入：使用中（ADB 输入法）";
+      if (setup) { setup.disabled = true; setup.hidden = true; }
+    } else {
+      label.textContent = "中文输入：可用";
+      if (setup) { setup.disabled = false; setup.hidden = false; setup.textContent = "切换到 ADB 输入法"; }
+    }
+    if (restore) restore.hidden = !inUse;
+  } catch (e) {
+    label.textContent = "中文输入：检测失败";
+    if (setup) { setup.disabled = false; setup.hidden = false; setup.textContent = "重试"; }
+  }
+}
+
+async function ensureChineseInput({ interactive = false } = {}) {
+  if (!textInput) throw new Error("请先连接设备");
+  let st = await textInput.status();
+  if (!st.installed) {
+    if (interactive && !confirm("中文输入需要在手机上装一个开源输入法插件 ADBKeyboard（约 18KB，GPL-2.0）。安装并启用？")) {
+      throw new Error("已取消安装中文输入插件");
+    }
+    toast("正在安装中文输入插件", "约 18KB，只会用来把电脑上的字送进手机输入框");
+    const blob = await textInput.fetchBundle();
+    await textInput.installFromBundle(blob, (p) => {
+      if (p?.phase === "install") toast("正在安装插件", "APK 已推送，正在安装…");
+      else if (p?.total) {
+        const pct = Math.round((p.sent / p.total) * 100);
+        if (pct === 100 || pct % 20 === 0) toast("正在推送插件", pct + "%");
+      }
+    });
+    st = await textInput.status();
+    if (!st.installed) throw new Error("插件安装后仍未检测到，请重试");
+  }
+  if (!st.enabled) await textInput.enable();
+  await textInput.activate();
+  await refreshImeStatus();
+  if (textInput.active) {
+    toast("中文输入已就绪", "手机已切到 ADB 输入法；不用时点「恢复手机输入法」");
+  }
+  return true;
+}
+
+/** 发送一段文字：ASCII 走 scrcpy 注键，非 ASCII 走 ADBKeyboard */
+async function sendTextSmart(text, { interactive = false } = {}) {
+  const body = String(text ?? "");
+  if (!body || !ctrl) return false;
+  if (!hasNonAscii(body)) {
+    await ctrl.injectText(body);
+    return true;
+  }
+  try {
+    await ensureChineseInput({ interactive });
+    await textInput.send(body);
+    toast("已上屏", body.length > 20 ? body.slice(0, 20) + "…" : body);
+    return true;
+  } catch (e) {
+    if (!interactive) {
+      try {
+        await ctrl.setClipboardAndPaste(body);
+        toast("中文已尝试走剪贴板", "若没上屏，点「安装中文输入插件」可彻底解决");
+        return true;
+      } catch {
+        /* ignore */
+      }
+    }
+    toast("中文发送失败", String(e?.message || e));
+    logLine("error", "chinese send fail " + String(e?.message || e));
+    return false;
+  }
+}
+
+on("btn-ime-setup", "click", async () => {
+  try {
+    await ensureChineseInput({ interactive: true });
+  } catch (e) {
+    toast("启用失败", String(e?.message || e));
+    logLine("error", "ime setup fail " + String(e?.message || e));
+  }
+  refreshImeStatus();
+});
+
+on("btn-ime-restore", "click", async () => {
+  try {
+    await textInput?.restore();
+    toast("已恢复手机输入法");
+  } catch (e) {
+    toast("恢复失败", String(e?.message || e));
+  }
+  refreshImeStatus();
+});
+
+/* 连接时自动启用的开关：保存在本机，关掉后只装插件、不切换输入法 */
+(function bindImeAuto() {
+  const box = $("ime-auto");
+  if (!box) return;
+  try {
+    box.checked = localStorage.getItem(IME_AUTO_KEY) !== "0";
+  } catch {
+    /* ignore */
+  }
+  box.addEventListener("change", () => {
+    try {
+      localStorage.setItem(IME_AUTO_KEY, box.checked ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (box.checked) {
+      toast("已开启", "下次连接会自动安装并启用中文输入");
+    } else {
+      toast("已关闭自动启用", "插件仍会安装，但不会切换手机输入法");
+      textInput?.restore().then(refreshImeStatus).catch(() => {});
+    }
+  });
+})();
+
+/* 调试钩子：仅 ?debug 时暴露，供自动化测试直接走页面内 ADB 通道 */
+if (location.search.includes("debug")) {
+  window.__ime = {
+    status: () => (textInput ? textInput.status() : Promise.resolve(null)),
+    shell: (argv) => mirror.adb?.subprocess?.noneProtocol?.spawnWaitText(argv),
+    activate: () => ensureChineseInput({ interactive: false }),
+    restore: () => (textInput ? textInput.restore() : Promise.resolve("")),
+  };
+  window.__ctrl = () => ctrl;
+}
+
 /* ---------- 文本框:输入自动上屏(IME 组合结束后再发) ---------- */
 (function bindLiveTextInput() {
   const input = $("clipboard-input");
@@ -1280,10 +1688,8 @@ all("[data-act]").forEach((el) => {
   async function sendAdd(add) {
     if (!ctrl || !add) return;
     try {
-      const hasCjk = /[^\x00-\xff]/.test(add);
-      if (hasCjk) await ctrl.setClipboardAndPaste(add);
-      else await ctrl.injectText(add);
-      logLine("ok", "auto input: " + add);
+      const ok = await sendTextSmart(add, { interactive: false });
+      logLine(ok ? "ok" : "error", "auto input: " + add);
     } catch (e) {
       logLine("error", "auto input fail " + String(e?.message || e));
     }
@@ -1366,17 +1772,12 @@ on("btn-send-text", "click", async () => {
   const text = String($("clipboard-input")?.value ?? "");
   if (!text || !ctrl) return toast(text ? "请先连接设备" : "请先输入文本");
   try {
-    const hasCjk = /[^\x00-\xff]/.test(text);
-    if (hasCjk) {
-      await ctrl.setClipboardAndPaste(text);
-      toast("已上屏", "中文走剪贴板粘贴");
-    } else {
-      await ctrl.injectText(text);
-      toast("已上屏");
+    const ok = await sendTextSmart(text, { interactive: true });
+    if (ok) {
+      logLine("ok", "send text len=" + text.length + (hasNonAscii(text) ? " non-ascii" : ""));
+      const box = $("clipboard-input");
+      if (box) box.value = "";
     }
-    logLine("ok", "send text len=" + text.length + (hasCjk ? " cjk" : ""));
-    const box = $("clipboard-input");
-    if (box) box.value = "";
   } catch (e) {
     logLine("error", "send text fail " + String(e?.message || e));
     toast("发送失败", String(e?.message || e));
@@ -1449,10 +1850,8 @@ on("btn-dev2pc", "click", async () => {
   async function sendAdd(add) {
     if (!ctrl || !add) return;
     try {
-      const hasCjk = /[^\x00-\xff]/.test(add);
-      if (hasCjk) await ctrl.setClipboardAndPaste(add);
-      else await ctrl.injectText(add);
-      logLine("ok", "fs auto: " + add);
+      const ok = await sendTextSmart(add, { interactive: false });
+      logLine(ok ? "ok" : "error", "fs auto: " + add);
     } catch (e) {
       logLine("error", "fs auto fail " + String(e?.message || e));
     }
@@ -1493,12 +1892,10 @@ on("btn-dev2pc", "click", async () => {
       return;
     }
     try {
-      const hasCjk = /[^\x00-\xff]/.test(text);
-      if (hasCjk) await ctrl.setClipboardAndPaste(text);
-      else await ctrl.injectText(text);
+      const ok = await sendTextSmart(text, { interactive: true });
+      if (!ok) return;
       box.value = "";
       last = "";
-      toast("已上屏");
       logLine("ok", "fs send " + text.length);
     } catch (e) {
       logLine("error", "fs send " + String(e?.message || e));
@@ -1528,6 +1925,11 @@ window.addEventListener("resize", fitCanvas);
 window.addEventListener("beforeunload", saveSettings);
 // 关闭/刷新页面时释放手机端音频占用，避免手机一直没声音
 window.addEventListener("pagehide", () => {
+  try {
+    textInput?.restore();
+  } catch {
+    /* ignore */
+  }
   try {
     mirror.stop();
   } catch {
