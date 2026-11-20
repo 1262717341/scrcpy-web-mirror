@@ -1223,7 +1223,14 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
     clearTimeout(usbStableTimer);
     showFail(err);
     usbStarting = false;
-    if (autoRetry && !usbManualStop) scheduleUsbReconnect("重连失败：" + String(err?.message || err));
+    if (autoRetry && !usbManualStop) {
+      if (err?.code === "NO_SERVER" && !mirror.hasServerJarCache()) {
+        logLine("error", "本地服务不可用且没有 scrcpy-server.jar 缓存，已暂停自动重连；启动本地服务后请点「重新连接」");
+        toast("本地服务已停止", "启动 scrcpy 便捷网页版后刷新页面再连接");
+      } else {
+        scheduleUsbReconnect("重连失败：" + String(err?.message || err));
+      }
+    }
   } finally {
     usbStarting = false;
     if ($("btn-start")) $("btn-start").disabled = false;
@@ -2063,6 +2070,7 @@ window.addEventListener("pagehide", () => {
   }
   decorateIcons();
   await refreshUsbDevices(true);
+  mirror.prefetchServerJar();
   logLine("info", "页面已就绪 · 设置已加载");
 })();
 

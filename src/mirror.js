@@ -161,7 +161,7 @@ function guideFor(code) {
     NO_DEVICE_FOUND: "系统未找到 ADB 接口。确认已开启 USB 调试；部分电脑需将驱动换成 WinUSB（Zadig）。",
     SCRCPY_FAIL: "scrcpy-server 启动失败，请重新插拔手机后重试。",
     NO_VIDEO: "视频流为空，请重试；仍失败请查看 Console。",
-    NO_SERVER: "请用 http://127.0.0.1:8765/control.html 打开页面，不要用 file://；并确认 device-local/assets/scrcpy-server.jar 存在。",
+    NO_SERVER: "scrcpy 便捷网页版服务可能已停止。请重新启动服务后刷新页面；若服务仍在运行，请确认通过 http://127.0.0.1:端口/control.html 打开，而不是 file://。",
   };
   return map[code] || "请检查 USB 连接、USB 调试与授权弹窗。";
 }
@@ -258,6 +258,13 @@ export class AdbMirror {
     this._awakeApplied = false;
     this._dropHandled = false;
     this._usbDisconnectHandler = null;
+    this._usbServerBytes = null;
+    this._usbServerBytesAt = 0;
+    this._serverJarPrefetch = null;
+    this._diagLastPacketAt = 0;
+    this._diagLastPacketKind = "";
+    this._diagLastDecoderError = "";
+    this._diagUsbEvent = "";
   }
 
   _detachUsbDisconnect() {
@@ -1189,6 +1196,65 @@ export class AdbMirror {
     this.onLog("scrcpy-server 无线上传完成");
   }
 
+  hasServerJarCache() {
+    return this._usbServerBytes instanceof ArrayBuffer && this._usbServerBytes.byteLength > 0;
+  }
+
+  /** 页面就绪时提前缓存 jar，避免「服务先停止、用户再点连接」时没有兜底。 */
+  prefetchServerJar() {
+    if (this.hasServerJarCache()) return Promise.resolve(this._usbServerBytes);
+    if (this._serverJarPrefetch) return this._serverJarPrefetch;
+    this._serverJarPrefetch = this._readServerJar()
+      .then((buf) => {
+        this.onLog(`已预缓存 scrcpy-server.jar（${buf.byteLength} 字节）`);
+        return buf;
+      })
+      .catch(() => null)
+      .finally(() => {
+        this._serverJarPrefetch = null;
+      });
+    return this._serverJarPrefetch;
+  }
+
+  /**
+   * 本地 HTTP 服务只在页面加载和 jar 下载时是强依赖。
+   * 首次拿到 scrcpy-server.jar 后保留原字节，断线重连优先用缓存，
+   * 避免「页面还活着、8765 已停止」时每次 ADB 认证成功却都卡在 Failed to fetch。
+   */
+  async _readServerJar() {
+    const url = new URL(SERVER_URL, location.href).href;
+    try {
+      const resp = await fetch(url, { cache: "no-cache" });
+      if (!resp.ok) {
+        throw new MirrorError(`加载 scrcpy-server.jar 失败（HTTP ${resp.status}）`, "NO_SERVER");
+      }
+      const buf = await resp.arrayBuffer();
+      if (!buf.byteLength) {
+        throw new MirrorError("scrcpy-server.jar 内容为空", "NO_SERVER");
+      }
+      this._usbServerBytes = buf;
+      this._usbServerBytesAt = Date.now();
+      return buf;
+    } catch (err) {
+      if (this.hasServerJarCache()) {
+        const age = Math.round((Date.now() - this._usbServerBytesAt) / 1000);
+        this.onLog(
+          `本地服务不可用，改用内存缓存的 scrcpy-server.jar（${this._usbServerBytes.byteLength} 字节，缓存 ${age} 秒）`
+        );
+        return this._usbServerBytes;
+      }
+      const reason = String(err?.message || err);
+      if (/Failed to fetch|NetworkError|ERR_CONNECTION|HTTP \d+/i.test(reason)) {
+        throw new MirrorError(
+          `无法下载 scrcpy-server.jar，且当前没有内存缓存。\n本地服务可能已停止，请重新启动 scrcpy 便捷网页版后刷新页面。\n目标：${url}`,
+          "NO_SERVER",
+          err
+        );
+      }
+      throw new MirrorError("下载 scrcpy-server.jar 失败：" + reason, "NO_SERVER", err);
+    }
+  }
+
   async pushServer() {
     if (this._wirelessTarget) {
       if (this._wirelessServerUploaded !== this._wirelessTarget) {
@@ -1200,31 +1266,7 @@ export class AdbMirror {
       return;
     }
     this.status("上传 scrcpy-server…");
-    const url = new URL(SERVER_URL, location.href).href;
-    let resp;
-    try {
-      resp = await fetch(url, { cache: "no-cache" });
-    } catch (err) {
-      const reason = String(err?.message || err);
-      if (/Failed to fetch|NetworkError|ERR_CONNECTION/i.test(reason)) {
-        throw new MirrorError(
-          `无法下载 scrcpy-server.jar（Failed to fetch）\n请确认本地服务在运行：http://127.0.0.1:8765/control.html\n不要用 file:// 直接打开 HTML。\n目标：${url}`,
-          "NO_SERVER",
-          err
-        );
-      }
-      throw new MirrorError("下载 scrcpy-server.jar 失败：" + reason, "NO_SERVER", err);
-    }
-    if (!resp.ok) {
-      throw new MirrorError(
-        `无法加载 scrcpy-server.jar（HTTP ${resp.status}）\n请检查 device-local/assets/scrcpy-server.jar 是否存在`,
-        "NO_SERVER"
-      );
-    }
-    const buf = await resp.arrayBuffer();
-    if (!buf.byteLength) {
-      throw new MirrorError("scrcpy-server.jar 内容为空", "NO_SERVER");
-    }
+    const buf = await this._readServerJar();
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(new Consumable(new Uint8Array(buf)));
@@ -1277,6 +1319,10 @@ export class AdbMirror {
     this._stopRequested = false;
     this._dropHandled = false;
     this._cleaned = false;
+    this._diagLastPacketAt = 0;
+    this._diagLastPacketKind = "";
+    this._diagLastDecoderError = "";
+    this._diagUsbEvent = "";
     // 防御：上一轮会话若还挂着（例如崩溃后直接点重新连接），先关掉再开新的
     if (this.client) {
       try {
@@ -1498,6 +1544,8 @@ export class AdbMirror {
       )
       .pipeThrough(
         new InspectStream((packet) => {
+          this._diagLastPacketAt = Date.now();
+          this._diagLastPacketKind = String(packet?.type || "") + (packet?.keyframe ? "/key" : "");
           try {
             if (packet?.type === "configuration") {
               const { croppedWidth, croppedHeight } = h264ParseConfiguration(packet.data);
@@ -1521,6 +1569,7 @@ export class AdbMirror {
       .pipeTo(this.decoder.writable)
       .catch((err) => {
         if (!this._stopRequested) {
+          this._diagLastDecoderError = String(err?.name || "Error") + ": " + String(err?.message || err);
           console.error("video pipe", err);
           this.onError(err);
           this.cleanupAfterDrop("视频解码管道异常：" + String(err?.message || err)).catch(() => {});
@@ -1532,14 +1581,22 @@ export class AdbMirror {
     this.status("投屏中");
     this.onStats(this._stats());
     this.client.exited.then(() => {
-      this.onLog("scrcpy 控制通道已退出 stopReq=" + this._stopRequested);
+      const upSec = this.startTs ? Math.round((performance.now() - this.startTs) / 1000) : 0;
+      const lastAge = this._diagLastPacketAt ? Math.round((Date.now() - this._diagLastPacketAt) / 1000) : -1;
+      this.onLog(
+        `scrcpy 控制通道已退出 stopReq=${this._stopRequested} 运行=${upSec}s 帧=${this.frames} ` +
+        `最后视频包=${lastAge >= 0 ? lastAge + "s 前(" + this._diagLastPacketKind + ")" : "无"} ` +
+        `解码错误=${this._diagLastDecoderError || "无"} USB事件=${this._diagUsbEvent || "无"}`
+      );
       if (!this._stopRequested) {
         this.running = false;
         this.status("投屏已结束");
         this.cleanupAfterDrop("scrcpy 控制通道退出").catch(() => {});
       }
     }).catch((e) => {
-      const reason = "scrcpy 控制通道异常：" + String(e?.message || e);
+      const output = Array.isArray(e?.output) ? e.output.slice(-8).join(" | ") : "";
+      const reason = "scrcpy 控制通道异常：" + String(e?.name || "Error") + ": " + String(e?.message || e) +
+        (output ? "；server 输出=" + output : "");
       this.onLog(reason);
       if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {});
     });
@@ -1688,6 +1745,7 @@ export class AdbMirror {
         this._detachUsbDisconnect();
         this._usbDisconnectHandler = (event) => {
           if (event.device !== this.device?.raw) return;
+          this._diagUsbEvent = "WebUSB disconnect @" + new Date().toISOString();
           this.onLog("WebUSB 系统事件：设备连接已移除（" + (this.device?.serial || "未知序列号") + "）");
           void this.cleanupAfterDrop("Windows/WebUSB 报告设备连接已移除");
         };

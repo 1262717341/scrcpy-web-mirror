@@ -56,7 +56,7 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.2.8"
+APP_VERSION = "4.2.9"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 # v4.2.3：应用名/图标解析的临时文件不再落到用户可见的 /sdcard，改放 shell 可写的临时目录。
