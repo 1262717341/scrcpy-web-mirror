@@ -1,167 +1,92 @@
-﻿# scrcpy 便捷网页版
+# scrcpy 便捷网页版
 
-在浏览器里投屏并控制安卓手机：基于 **WebUSB + WebCodecs**，不装客户端，一条 USB 线或同一 Wi‑Fi 就能看到手机画面、用鼠标键盘直接操作。
+在浏览器里投屏并控制安卓手机：基于 **WebUSB + WebCodecs**，不用装手机客户端，一条 USB 线或同一 Wi‑Fi 就能看到画面、用鼠标键盘操作，并管理手机上的应用与文件。
 
-<p align="left">
-  <img src="assets/logo.png" alt="scrcpy 便捷网页版" width="120" />
-</p>
-
-- 当前版本：**v4.0.14**
+- 当前版本：**v4.2.5**
 - 内核：scrcpy-server 5.0.1 · `@yume-chan/adb` / `@yume-chan/scrcpy`
 - 平台：Windows 10 / 11，浏览器 Chrome / Edge 110+
+- 下载：**[最新安装包](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**
 
-> **非官方项目**：本项目是第三方网页端实现，不是 [scrcpy](https://github.com/Genymobile/scrcpy) 官方项目，与 Genymobile 无隶属或背书关系。第三方组件的版权与许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+> 非官方项目：本项目是第三方网页端实现，不是 scrcpy 官方项目，与 Genymobile 无隶属或背书关系。第三方组件的版权与许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
-## 功能特性
+## 功能
 
 | 能力 | 说明 |
 | --- | --- |
-| USB 投屏 | 手机打开「USB 调试」后一键连接，复用本机官方 `adb.exe`，不弹 WebUSB 设备选择器 |
-| 无线投屏 | USB 已连时一键 `adb tcpip 5555` 并读取手机 IP；同一 Wi‑Fi 下也支持自动搜索并连接 `IP:5555` |
-| 画质调节 | 分辨率、FPS、码率、视频源、声音输出可调，选项自动保存，下次打开沿用 |
-| 音频转发 | Android 13+ 支持「手机 + 电脑」双路出声；优先 raw PCM，不支持时走 Opus / AAC + WebCodecs |
-| 操作控制 | 画布触控、滑动、滚轮；导航键、文本输入（中文选词后上屏）、退格/回车同步；剪贴板双向同步 |
-| 截图 | 一键截取当前画面，保存到电脑「图片」目录 |
-| 界面 | 侧边工具轨 + 抽屉式面板，支持全屏（H）、沉浸模式（I）、静音（M）、停止投屏（Shift+Esc） |
-| 皮肤 | 内置 warm / mint / cobalt / graphite 四套配色，自定义主色与背景色，工具轨可左右切换 |
+| USB 投屏 | 手机打开「USB 调试」后一键连接，走 WebUSB，不弹设备选择器 |
+| 无线投屏 | USB 已连时可一键 `adb tcpip 5555`，也可自动搜索同一 Wi‑Fi 下的 `IP:5555` |
+| 画面参数 | 分辨率、FPS、码率、视频源、声音输出可调，自动记住上次设置 |
+| 音频转发 | Android 13+ 支持手机与电脑双路出声，raw PCM 优先，必要时 Opus / AAC |
+| 操作控制 | 画布触控、滑动、滚轮、导航键；电脑键盘直接输入；中文输入法自动注入；剪贴板双向同步 |
+| 应用管理 | 524+ 应用列表、真实名称与图标、搜索/三态筛选、启动/停止/详情、批量强制停止/停用/启用/清除数据/卸载；系统应用不显示卸载 |
+| 文件管理 | 目录浏览、详情、多选、复制/粘贴、改名、删除、新建目录、上传/下载 |
+| 截图与指南 | 一键截图保存到电脑；内置 12 章使用指南与连接排查 |
+| 界面 | 抽屉式面板、四套配色、全屏（H）、沉浸（I）、静音（M）、停止投屏（Shift+Esc） |
+| 常亮与清理 | 投屏期间强制常亮，停止后恢复原息屏时间；退出时清理手机端临时文件与 scrcpy 进程 |
 
-## 更新日志
+## 安装
 
-### v4.0.14
+1. 下载 `scrcpy便捷网页版-v4.2.5-Setup-x64.exe`。
+2. 安装后双击桌面快捷方式，浏览器打开 `http://127.0.0.1:8765/control.html`。
+3. 手机进入「开发者选项」→ 打开「USB 调试」，数据线连电脑。
+4. 页面点「开始 USB 投屏」，手机上点「允许调试」。
 
-- **开始菜单快捷方式可选**：安装向导「附加任务」新增「创建开始菜单快捷方式」，默认勾选、记住上次选择；取消勾选后不再写入开始菜单项，桌面快捷方式仍独立可选。
-- **安装前退出 adb 与 python**：安装器枚举本机进程，结束全部 `adb.exe` 与 `python.exe` / `pythonw.exe`（不限目录），每轮间隔 700 ms 复查、最多重试 3 轮；全部退出后才卸载旧版、写入文件。
-- **手动退出提示**：若 3 轮后仍有进程存活，弹窗列出剩余数量并说明任务管理器操作，提供「重试 / 取消」；点取消则中止安装，不改动任何文件。
-- **关闭 Inno 自带 CloseApplications**：避免它发关闭消息后仍继续安装、导致文件被占用，统一由上述逻辑处理。
-### v4.0.13
+无线：USB 连着时点「开启无线调试」，拔线后填手机 IP；手机与电脑需在同一 Wi‑Fi。
 
-- **画面上下贴边**：舞台上下原为四角读数预留 38 px 净空，读数移入侧栏后这段净空没收回，竖屏画面上下合计约 84 px 黑边。本轮净空收到 6 px、安全距收到 4 px，并让比例优先取设备真实帧尺寸；1710×1307 / 1280×720 / 1024×600 / 700×900 四档窗口 × 竖屏横屏实测，竖屏上下各 10 px，横屏改为左右各 4 px 撑满宽度。
-- **触控按压自愈**：窗口失焦、指针移出画面或异常路径丢失 `pointerup` 时，指针会一直留在「已按下」表里，下一次点击被降级成移动事件、点不出点击。现在重复按下会先补发 `CANCEL` 清掉设备端旧态再重新按下，本地按压表也随之复位。
-- **控制写入超时兜底**：无线拥塞或连接半开时控制写入可能永久挂起，后续触控全部排队等同一个 Promise。现在所有触控 / 滚轮 / 按键指令都带 2 s 超时竞速，失败即清理本地状态并在日志面板提示「控制指令发送超时」，重连投屏即可恢复。
-- **全局释放**：窗口失焦、全局指针取消、页面切到后台时自动释放所有残留按压；重新绑定控制前也会先清一遍，断线后清空控制器引用。
-- **回归**：控制器行为单测 8 项、画面适配自动化 28 项、真机无线端到端 9 项，合计 45 项全部通过，详见 `v4.0.13-测试报告.html`。
+## 从源码运行
 
-### v4.0.12
+前置：Windows 10 / 11、Python 3.9+、Chrome 或 Edge 110+。仓库已带构建好的 `js/mirror.bundle.js`。
 
-- **读数条移入侧栏底部**：CH/ADB、RES/FPS、设备/声音、VIEW 四项读数不再叠加在手机画面上，统一收进左侧栏底部的半透明读数条；窄屏（≤760 px）自动改为底部工具轨上方的整宽横排，1366/1024/700 三档窗口实测与画面零重叠。
-- **无线连接提速**：启动前的设备清理与看门狗布防各自合并为一次 shell 往返、并与 scrcpy 启动并行；`/api/wireless-push` 在手机端 jar 尺寸一致时跳过 700 KB 重传。实测热态二次连接 1.5 s、冷态首次 6.5 s。
-- **ADB 握手超时**：默认 15 s → 30 s，给首次「允许 USB 调试」留出点击时间；排查时可用 `?auth_timeout=毫秒` 覆盖。连接失败时顶栏直接显示「连接失败」，不再停在「ADB 握手中…」。
-- **手机端看门狗收敛**：无线会话失联即结束手机端 scrcpy、释放音频采集并退出；判据只剩「心跳过期 30 s」「Wi‑Fi IPv4 连续两次消失」「从未收到心跳满 60 s」三条，心跳/运行标记带会话号隔离，不会误杀新会话。实现细节见 `docs/watchdog.md`。
-- **读数条跟随侧栏（界面修订）**：读数条改为侧栏卡片的底栏，与抽屉共用边框与底色，侧栏在左/在右、抽屉来回切换时都贴在同一张卡的最底部；抽屉让出读数条高度，日志框末尾不再被遮挡。未连接时也常驻显示条目（占位「—」，连上后自动填值）。
-- **工具轨重排**：沉浸按钮移到全屏上方并改名「沉浸」；皮肤/指南/停止投屏/停止服务收拢到工具轨最底部；指南取消未连接时的高亮。
-- **界面文案中文化**：`CONNECTION MODE / STREAM / BEHAVIOR / TELEMETRY / REAL‑TIME LOG` 等装饰性英文全部改为中文；`H.264 / Mbps / USB / Wi‑Fi / IP` 等技术术语保留。
+1. 把官方 platform-tools 的 `adb.exe`、`AdbWinApi.dll`、`AdbWinUsbApi.dll` 放进 `assets/adb/`（受体积限制未入库）。
+2. 启动服务：
 
-## 下载安装
-
-不想配环境？直接下安装包：**[scrcpy-web-mirror-v4.0.14-Setup-x64.exe](https://github.com/1262717341/scrcpy-web-mirror/releases/latest)**（约 15 MB，内置 Python 运行时与官方 adb）。安装后双击桌面快捷方式启动，手机开「USB 调试」并连上电脑，点「开始 USB 投屏」即可。
-
-## 从源码运行（开发者）
-
-> 前置条件：Windows 10 / 11、Python 3.9+、Chrome 或 Edge 110+。仓库已带构建好的 `js/mirror.bundle.js`，不装 Node 也能直接跑。
-
-```bash
-git clone https://github.com/1262717341/scrcpy-web-mirror.git
-cd scrcpy-web-mirror
+```powershell
+python serve.py
 ```
 
-1. **补齐 adb**：把官方 platform-tools 里的 `adb.exe`、`AdbWinApi.dll`、`AdbWinUsbApi.dll` 放进 `assets/adb/`（受体积限制未入库）。
-2. **启动本地服务**：
+3. 打开 `http://127.0.0.1:8765/control.html`。端口可用环境变量 `PANDA_PORT` 覆盖。
+4. 改前端后重新构建：
 
-   ```bash
-   python serve.py
-   ```
-
-   然后浏览器打开 <http://127.0.0.1:8765/control.html>。端口可用环境变量 `PANDA_PORT` 覆盖。
-3. **改前端时再构建**（可选）：
-
-   ```bash
-   npm install
-   npm run build
-   ```
-
-> `start.vbs` 是安装包内的静默启动脚本，依赖同目录的 `runtime\pythonw.exe`（内置 Python 运行时）；源码环境用系统 Python 直接跑 `serve.py` 即可。
-
-## 使用流程
-
-1. 手机进入「开发者选项」→ 打开「USB 调试」，数据线连电脑。
-2. 网页点「开始 USB 投屏」，手机上点「允许调试」。
-3. 想无线用：USB 连着时点「开启无线调试」（等价 `adb tcpip 5555`），拔线后填手机 IP 连接；手机与电脑同一 Wi‑Fi 也可直接「自动搜索」。
-
-**注意**：USB 与无线二选一，不要同时开。若提示端口/设备被占用，先关掉其它 adb、手机助手或其它投屏页面。
-
-## 目录结构
-
-```
-.
-├─ control.html          # 主界面（控制台/抽屉面板）
-├─ index.html            # 入口跳转页
-├─ serve.py              # 本地静态服务 + 设备侧接口（status/shutdown/usb-push/wireless-push/save-shot…）
-├─ start.vbs             # 安装包使用的静默启动脚本
-├─ build.mjs             # esbuild 打包脚本
-├─ css/app.css           # 界面样式
-├─ js/mirror.bundle.js   # 构建产物（已入库，开箱即用）
-├─ src/
-│  ├─ page-mirror.js     # 投屏主逻辑（WebUSB ADB · WebCodecs 解码）
-│  ├─ mirror.js          # 投屏封装与设备会话
-│  ├─ wireless.js        # 无线连接 / tcpip / 自动搜索
-│  ├─ control.js         # 触摸、键盘、剪贴板、导航键
-│  └─ audio.js           # PCM / Opus / AAC 音频转发
-├─ assets/
-│  ├─ scrcpy-server.jar  # scrcpy 服务端（5.0.1）
-│  ├─ adb/               # 官方 adb（本地放置，未入库）
-│  ├─ logo.png
-│  └─ custom-icon.ico
-└─ docs/compose/spec/    # UI v3 改版设计稿
+```powershell
+npm install
+npm run build
 ```
 
-## 工作原理
+## 目录
 
-- 浏览器侧通过 `@yume-chan/adb` 走 **WebUSB** 直连手机 ADB，推送 `scrcpy-server.jar` 并建立视频/音频/控制三条通道。
-- 视频流用 **WebCodecs** 硬解后绘制到 Canvas；音频优先 raw PCM，必要时 Opus/AAC 解码。
-- 本地 `serve.py` 只做两件事：提供静态文件、代理需要真实 `adb.exe` 才能完成的操作（设备枚举、`tcpip`、推送 server、截图落盘等），并监听 `127.0.0.1`。
-- 退出页面时调用 `/api/shutdown` 结束服务并清理残留的 `adb` / `scrcpy` 进程。
+```text
+F:\scrcpy便捷网页版\
+├─ README.md / CHANGELOG.md
+├─ scrcpy便捷网页版v4.2.5\   当前源码
+├─ scrcpy便捷网页版v4.2.4\   上一版源码
+├─ 发布\
+│  ├─ v4.2.5\               安装包、iss、测试报告
+│  ├─ v4.2.4\               安装包、iss、测试报告
+│  └─ 历史\                 旧安装包、旧报告、源码快照、压缩包、日志
+├─ tests\                   有线/无线/单元测试与截图
+├─ tools\                   打包与辅助脚本
+└─ installer-lang\          Inno Setup 中文语言文件
+```
 
-## 快捷键
+## 版本说明
 
-| 按键 | 作用 |
-| --- | --- |
-| `H` | 全屏（隐藏侧栏，保留可拖动控制条） |
-| `M` | 静音 / 恢复声音 |
-| `I` | 沉浸模式（隐藏全部工具栏，`I` / `V` / `Esc` 恢复） |
-| `Shift+Esc` | 停止投屏 |
+完整逐版记录见 [CHANGELOG.md](CHANGELOG.md)。最近两版：
+
+- **v4.2.5**：修复 USB 有线连接几秒后断流。投屏期间不再无谓启动/杀掉 adb server，给 USB 句柄留稳定期，并对 30 秒内的首次意外断流自动重连一次。
+- **v4.2.4**：USB 模式下释放 adb 改用自带 `adb.exe kill-server`；查询应用元数据时不再启动 adb，避免抢回 WebUSB 接口。
 
 ## 常见问题
 
-- **画面黑屏 / 浏览器黑屏**：关闭浏览器硬件加速后再试，或换 Chrome / Edge 最新版。
-- **无线连不上**：确认同一 Wi‑Fi、手机已开无线调试、IP 正确；必要时先用 USB 执行一次 `adb tcpip 5555`。
-- **没有声音**：Android 13 以下不转发音频（客户端会自动降级）；断开投屏后手机仍无声，按一次手机音量键或重连一次。
-- **无线时手机锁屏变黑**：本版本不修改手机锁屏时间，请在手机「设置 → 显示 → 休眠」自行调整。
-- **提示 adb 被占用**：关掉其它 adb 服务、手机助手、同类投屏页面后重试。
+- **USB 连上几秒就断**：确认使用 v4.2.5；关闭小米互联、手机助手、其它 adb/投屏工具后重试。
+- **无线连不上**：确认同一 Wi‑Fi、IP 正确、手机已开无线调试；必要时先用 USB 执行一次 `adb tcpip 5555`。
+- **没有声音**：Android 13 以下不转发音频；断开后手机仍无声时按一次音量键或重连。
+- **adb 被占用**：关掉其它 adb 服务、手机助手、同类投屏页面后重试。
+- **关闭页面后手机仍常亮**：下一次连接会自动补回息屏时间；也可在手机「设置 → 显示 → 休眠」手动改回。
 
-## 构建
+## 许可
 
-```bash
-npm install
-npm run build     # esbuild 打包 src/page-mirror.js → js/mirror.bundle.js
-```
-
-## 来源、许可与致谢
-
-本项目自身代码以 **Apache-2.0** 发布，见 [LICENSE](LICENSE)。
-
-用到的第三方作品（完整清单、用途与许可全文见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，原文在 `third_party/`）：
-
-| 组件 | 用途 | 许可 | 版权 | 上游 |
-| --- | --- | --- | --- | --- |
-| scrcpy 5.0.1（`assets/scrcpy-server.jar`） | 手机端服务、投屏与控制协议 | Apache-2.0 | © Genymobile | [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) |
-| @yume-chan/adb、scrcpy、pcm-player 等 13 个包 | 浏览器 ADB、scrcpy 协议、音频播放 | MIT | © 2020–2025 Simon Chan | [yume-chan/ya-webadb](https://github.com/yume-chan/ya-webadb) |
-| tinyh264 | H.264 软件解码回落 | Apache-2.0 | © Erik De Rijcke | [aaaronic/tinyh264](https://github.com/aaaronic/tinyh264) |
-| yuv-buffer / yuv-canvas | YUV 帧转换与 Canvas 绘制 | MIT | © 2014–2024 Brooke Vibber | [btlr/yuv-canvas](https://github.com/btlr/yuv-canvas) |
-| esbuild | 打包 `js/mirror.bundle.js` | MIT | © 2020 Evan Wallace | [evanw/esbuild](https://github.com/evanw/esbuild) |
-| Android platform-tools | 需自行放入 `assets/adb/`，不随仓库分发 | Apache-2.0 | © Google LLC | [developer.android.com](https://developer.android.com/tools/releases/platform-tools) |
-
-`scrcpy`、`Android`、`Chrome`、`Edge`、`Windows` 等名称与商标归各自所有者。本项目与上述项目均无隶属关系，也不代表其官方立场。
+本项目自身代码以 Apache-2.0 发布，见 [LICENSE](LICENSE)。第三方组件清单与许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。`scrcpy`、`Android`、`Chrome`、`Edge`、`Windows` 等名称与商标归各自所有者。
 
 ## 免责声明
 
-本项目仅用于调试**自己拥有或已获授权**的安卓设备。请遵守所在地法律法规及设备使用协议，勿用于未授权的监控或数据获取。
+本项目仅用于调试自己拥有或已获授权的安卓设备。请遵守所在地法律法规及设备使用协议，勿用于未授权的监控或数据获取。

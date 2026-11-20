@@ -9,10 +9,17 @@ from __future__ import annotations
 import json
 import ipaddress
 import os
+import re
+import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
+import threading
+import time
+import uuid
+import zipfile
 
 # pythonw.exe has no console streams; redirect them so request logging stays safe.
 if sys.stdout is None:
@@ -25,7 +32,7 @@ import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 import os
 from datetime import datetime
@@ -49,8 +56,13 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.0.14"
+APP_VERSION = "4.2.5"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+# v4.2.3：应用名/图标解析的临时文件不再落到用户可见的 /sdcard，改放 shell 可写的临时目录。
+REMOTE_TEMP_DIR = "/data/local/tmp/scrcpy-web"
+_legacy_cleanup_done: set[str] = set()
+_legacy_cleanup_lock = threading.Lock()
 
 
 def run_bundled_adb(args: list[str], timeout: int = 20) -> subprocess.CompletedProcess:
@@ -73,11 +85,27 @@ def run_bundled_adb(args: list[str], timeout: int = 20) -> subprocess.CompletedP
     )
 
 
-def adb_usb_devices() -> list[dict]:
-    """Query USB devices from the local ADB server, starting it on demand."""
-    start = run_bundled_adb(["start-server"], 15)
-    if start.returncode != 0:
-        raise RuntimeError((start.stdout + start.stderr).strip() or "ADB 启动失败")
+def adb_server_running(timeout: float = 0.35) -> bool:
+    """只探测 5037，不启动 adb；避免 USB 串流期间被后台拉起 adb 抢走接口。"""
+    try:
+        with socket.create_connection(("127.0.0.1", 5037), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def adb_usb_devices(start_if_needed: bool = False) -> list[dict]:
+    """查询本机 ADB 设备。
+
+    默认不启动 adb server：USB WebUSB 会话期间，后台启动 adb 会重新抢占
+    同一个 USB 接口，表现为连上几秒后突然断流。只有显式允许时才拉起服务。
+    """
+    if not adb_server_running():
+        if not start_if_needed:
+            return []
+        start = run_bundled_adb(["start-server"], 15)
+        if start.returncode != 0:
+            raise RuntimeError((start.stdout + start.stderr).strip() or "ADB 启动失败")
     result = run_bundled_adb(["devices", "-l"], 15)
     output = (result.stdout + result.stderr).strip()
     if result.returncode != 0:
@@ -98,6 +126,315 @@ def adb_usb_devices() -> list[dict]:
                 item[key] = value
         devices.append(item)
     return devices
+
+
+# ---------------- 应用名 / 图标 ----------------
+def _pick_app_meta_dir() -> Path:
+    """源代码目录可写时沿用旧缓存；装进 Program Files 后自动改到用户目录。"""
+    candidates = [ROOT / "appmeta_cache"]
+    local = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
+    if local:
+        candidates.append(Path(local) / "scrcpy-web" / "appmeta_cache")
+    candidates.append(Path(tempfile.gettempdir()) / "scrcpy-web-appmeta")
+    for path in candidates:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            probe = path / (".write-probe-" + str(os.getpid()))
+            probe.write_text("ok", "utf-8")
+            probe.unlink()
+            return path
+        except OSError:
+            continue
+    return candidates[-1]
+
+
+APP_META_DIR = _pick_app_meta_dir()
+_APP_META_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+_APP_META_GUARD = threading.Lock()
+
+
+def _posix_quote(value: str) -> str:
+    return "'" + str(value).replace("'", "'\\''") + "'"
+
+
+def _meta_lock(serial: str, pkg: str) -> threading.Lock:
+    key = (serial, pkg)
+    with _APP_META_GUARD:
+        lock = _APP_META_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _APP_META_LOCKS[key] = lock
+        return lock
+
+
+def _cache_dir(serial: str) -> Path:
+    safe = re.sub(r"[^0-9A-Za-z._-]", "_", serial)
+    path = APP_META_DIR / safe
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _adopt_meta_from_other(serial: str, pkg: str) -> dict | None:
+    """USB 直连时本机 adb 不能抢接口；从其它设备序列号的缓存里复用同名包的应用名/图标。"""
+    target = _cache_dir(serial)
+    meta_file = target / f"{pkg}.json"
+    if meta_file.is_file():
+        return None
+    try:
+        holders = [d for d in APP_META_DIR.iterdir() if d.is_dir() and d != target]
+    except OSError:
+        return None
+    for holder in holders:
+        if holder.name.startswith("meta_"):
+            continue
+        source_file = holder / f"{pkg}.json"
+        if not source_file.is_file():
+            continue
+        try:
+            cached = json.loads(source_file.read_text("utf-8"))
+        except Exception:
+            continue
+        icon = cached.get("icon") or ""
+        if icon and not (holder / icon).is_file():
+            continue
+        try:
+            if icon:
+                shutil.copy2(holder / icon, target / icon)
+            temp_file = target / f"{pkg}.json.tmp"
+            temp_file.write_text(json.dumps(cached, ensure_ascii=False), "utf-8")
+            temp_file.replace(meta_file)
+        except OSError:
+            continue
+        return {
+            "ok": True,
+            "name": cached.get("name") or pkg,
+            "pkg": pkg,
+            "icon": bool(icon),
+            "iconVersion": int(meta_file.stat().st_mtime),
+            "shared": True,
+        }
+    return None
+
+
+def _adb_pull(serial: str, remote: str, local: Path, timeout: int = 40) -> None:
+    # adb 的可执行目录是 assets\adb；对含中文的绝对路径 adb 会报“无法创建目录”，
+    # 这里改成相对 adb 目录的路径，既避开中文前缀，也保持文件落在原目标位置。
+    try:
+        local_arg = os.path.relpath(str(local), str(ROOT / "assets" / "adb"))
+    except ValueError:
+        local_arg = str(local)
+    result = run_bundled_adb(["-s", serial, "pull", remote, local_arg], timeout)
+    if not local.is_file():
+        raise RuntimeError((result.stdout + result.stderr).strip() or "ADB 拉取失败")
+
+
+def _package_apk(serial: str, pkg: str) -> str:
+    # 无线设备：本机 adb server 与网页的直连是两条通道，这里先确保 adb server 也连上
+    if ":" in serial:
+        try:
+            listed = run_bundled_adb(["devices"], 10)
+            if f"{serial}\tdevice" not in (listed.stdout or ""):
+                run_bundled_adb(["connect", serial], 15)
+        except Exception:
+            pass
+    result = run_bundled_adb(["-s", serial, "shell", f"pm path {_posix_quote(pkg)}"], 20)
+    for line in (result.stdout + result.stderr).splitlines():
+        line = line.strip()
+        if line.startswith("package:"):
+            return line[len("package:"):].strip()
+    if ":" in serial:
+        # 网页直连可能挤掉了 adb server 的连接，重连后重试一次
+        try:
+            run_bundled_adb(["connect", serial], 15)
+            result = run_bundled_adb(["-s", serial, "shell", f"pm path {_posix_quote(pkg)}"], 20)
+            for line in (result.stdout + result.stderr).splitlines():
+                line = line.strip()
+                if line.startswith("package:"):
+                    return line[len("package:"):].strip()
+        except Exception:
+            pass
+    raise RuntimeError("找不到应用安装包")
+
+
+def _cleanup_legacy_temp(serial: str) -> None:
+    """每个服务进程只做一次：清掉旧版本留在 /sdcard 根目录的应用解析临时文件。"""
+    with _legacy_cleanup_lock:
+        if serial in _legacy_cleanup_done:
+            return
+        try:
+            run_bundled_adb(
+                ["-s", serial, "shell",
+                 "rm -f /sdcard/.scrcpy_*.xml /sdcard/.scrcpy_*.arsc /sdcard/.scrcpy_*.icon 2>/dev/null; "
+                 f"rm -rf {REMOTE_TEMP_DIR}; mkdir -p {REMOTE_TEMP_DIR}; true"],
+                15,
+            )
+            _legacy_cleanup_done.add(serial)
+            wlog(f"已清理旧版 /sdcard/.scrcpy_* 临时文件 · {serial}")
+        except Exception as e:
+            wlog(f"旧版临时文件清理失败 · {serial} · {e}")
+
+
+def app_meta(serial: str, pkg: str) -> dict:
+    """读取应用显示名与图标路径（结果按包名缓存，APK 路径变化才刷新）。"""
+    if not re.fullmatch(r"[0-9A-Za-z._:-]{1,80}", serial or ""):
+        raise RuntimeError("设备序列号不合法")
+    if not re.fullmatch(r"[A-Za-z0-9_.]{1,160}", pkg or ""):
+        raise RuntimeError("包名不合法")
+
+    # framework-res.apk 不是可启动应用，资源和体积都异常大；直接给固定名称，避免拖住队列。
+    if pkg == "android":
+        return {"ok": True, "name": "Android 系统框架", "pkg": pkg, "icon": False, "iconVersion": 0}
+
+    # USB 直连由 WebUSB 独占 ADB 接口，服务端再起 adb 会抢走设备并中断投屏。
+    # 有历史缓存就复用；没有缓存也只回包名，绝不在 USB 投屏期间调用本机 adb。
+    if ":" not in serial:
+        cached = _adopt_meta_from_other(serial, pkg)
+        if cached:
+            return cached
+        return {"ok": True, "name": pkg, "pkg": pkg, "icon": False, "iconVersion": 0, "usbFallback": True}
+
+    _cleanup_legacy_temp(serial)
+
+    vendor = ROOT / "tools" / "vendor_pyaxml"
+    if str(vendor) not in sys.path:
+        sys.path.insert(0, str(vendor))
+    try:
+        from pyaxmlparser import APK  # 延迟导入，避免拖慢服务启动
+    except Exception as e:
+        raise RuntimeError("应用信息解析组件不可用：" + str(e))
+
+    cache = _cache_dir(serial)
+    meta_file = cache / f"{pkg}.json"
+    with _meta_lock(serial, pkg):
+        try:
+            apk_path = _package_apk(serial, pkg)
+        except Exception:
+            # 设备暂时不可达时退回已有缓存，避免列表整片报错
+            if meta_file.is_file():
+                try:
+                    cached = json.loads(meta_file.read_text("utf-8"))
+                except Exception:
+                    cached = {}
+                icon = cached.get("icon") or ""
+                if icon and (cache / icon).is_file():
+                    return {
+                        "ok": True,
+                        "name": cached.get("name") or pkg,
+                        "pkg": pkg,
+                        "icon": True,
+                        "iconVersion": int(meta_file.stat().st_mtime),
+                    }
+            raise
+        if meta_file.is_file():
+            try:
+                cached = json.loads(meta_file.read_text("utf-8"))
+            except Exception:
+                cached = {}
+            if cached.get("apk") == apk_path:
+                icon = cached.get("icon") or ""
+                if not icon or (cache / icon).is_file():
+                    cached["name"] = cached.get("name") or pkg
+                    cached["icon"] = icon
+                    return {
+                        "ok": True,
+                        "name": cached["name"],
+                        "pkg": pkg,
+                        "icon": bool(icon and (cache / icon).is_file()),
+                        "iconVersion": int(meta_file.stat().st_mtime),
+                    }
+
+        token = uuid.uuid4().hex[:10]
+        remote_xml = f"{REMOTE_TEMP_DIR}/{token}.xml"
+        remote_arsc = f"{REMOTE_TEMP_DIR}/{token}.arsc"
+        remote_icon = f"{REMOTE_TEMP_DIR}/{token}.icon"
+        work = Path(tempfile.mkdtemp(prefix="meta_", dir=str(cache)))
+        try:
+            cmd = (
+                f"mkdir -p {REMOTE_TEMP_DIR}; "
+                f"unzip -p {_posix_quote(apk_path)} AndroidManifest.xml > {remote_xml}; "
+                f"unzip -p {_posix_quote(apk_path)} resources.arsc > {remote_arsc}"
+            )
+            run_bundled_adb(["-s", serial, "shell", cmd], 40)
+            local_xml = work / "AndroidManifest.xml"
+            local_arsc = work / "resources.arsc"
+            _adb_pull(serial, remote_xml, local_xml)
+            _adb_pull(serial, remote_arsc, local_arsc)
+
+            mini_apk = work / "mini.apk"
+            with zipfile.ZipFile(mini_apk, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(local_xml, "AndroidManifest.xml")
+                zf.write(local_arsc, "resources.arsc")
+
+            vendor = ROOT / "tools" / "vendor_pyaxml"
+            if str(vendor) not in sys.path:
+                sys.path.insert(0, str(vendor))
+
+            apk = APK(str(mini_apk))
+            name = ""
+            try:
+                name = (apk.get_app_name() or "").strip()
+            except Exception:
+                name = ""
+            icon_entry = ""
+            for dpi in (640, 480, 320, 240, 160):
+                try:
+                    icon_entry = apk.get_app_icon(dpi) or ""
+                except Exception:
+                    icon_entry = ""
+                if icon_entry:
+                    break
+
+            icon_name = ""
+            if icon_entry and not icon_entry.lower().endswith(".xml"):
+                ext = Path(icon_entry).suffix.lower()
+                if ext in (".png", ".webp", ".jpg", ".jpeg"):
+                    try:
+                        run_bundled_adb(
+                            ["-s", serial, "shell",
+                             f"unzip -p {_posix_quote(apk_path)} {_posix_quote(icon_entry)} > {remote_icon}"],
+                            30,
+                        )
+                        icon_name = f"{pkg}{ext}"
+                        _adb_pull(serial, remote_icon, cache / icon_name)
+                    except Exception:
+                        icon_name = ""
+            meta = {"name": name or pkg, "apk": apk_path, "icon": icon_name, "ts": time.time()}
+            meta_file.write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+            return {
+                "ok": True,
+                "name": meta["name"],
+                "pkg": pkg,
+                "icon": bool(icon_name),
+                "iconVersion": int(meta_file.stat().st_mtime),
+            }
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+            try:
+                run_bundled_adb(
+                    ["-s", serial, "shell",
+                     f"rm -f {remote_xml} {remote_arsc} {remote_icon}; rmdir {REMOTE_TEMP_DIR} 2>/dev/null; true"],
+                    10,
+                )
+            except Exception as e:
+                wlog(f"临时文件清理失败 · {serial} · {e}")
+
+
+def app_icon_path(serial: str, pkg: str) -> Path | None:
+    if not re.fullmatch(r"[0-9A-Za-z._:-]{1,80}", serial or ""):
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_.]{1,160}", pkg or ""):
+        return None
+    cache = _cache_dir(serial)
+    meta_file = cache / f"{pkg}.json"
+    if not meta_file.is_file():
+        return None
+    try:
+        meta = json.loads(meta_file.read_text("utf-8"))
+    except Exception:
+        return None
+    icon = meta.get("icon") or ""
+    path = cache / icon if icon else None
+    return path if path and path.is_file() else None
 
 
 def json_response(handler: SimpleHTTPRequestHandler, code: int, payload: dict) -> None:
@@ -230,7 +567,15 @@ def kill_project_processes() -> dict:
     except OSError:
         pass
 
-    return {"killed": killed}
+    # 停服务连 adb 一起收掉，避免 adb.exe 留在后台占着 5037/USB 设备
+    adb_stopped = False
+    try:
+        run_bundled_adb(["kill-server"], 8)
+        adb_stopped = True
+    except Exception:
+        pass
+
+    return {"killed": killed, "adbStopped": adb_stopped}
 
 
 def _probe_status(timeout: float = 0.6):
@@ -359,13 +704,18 @@ def _ws_send(sock, payload: bytes, opcode: int = 0x2) -> None:
     sock.sendall(bytes(header) + payload)
 
 
-def _ws_feed(buf: bytearray):
-    """Yield (kind, payload) for complete client frames. Client frames are masked."""
+def _ws_feed(buf: bytearray, frag: dict):
+    """Yield (kind, payload) for complete client messages.
+
+    浏览器会把大消息拆成 FIN=0 的首帧 + opcode=0 的续帧；必须按消息重组，
+    否则每个大包都会丢掉续帧里的字节，手机端 adbd 读到坏流后会直接断开。
+    """
     while True:
         if len(buf) < 2:
             return
         b0 = buf[0]
         b1 = buf[1]
+        fin = (b0 & 0x80) != 0
         opcode = b0 & 0x0F
         masked = (b1 & 0x80) != 0
         ln = b1 & 0x7F
@@ -403,8 +753,23 @@ def _ws_feed(buf: bytearray):
             continue
         if opcode == 0xA:
             continue
+        if opcode == 0x0:
+            # 续帧：拼到上一条消息里，等 FIN 再交付
+            frag["data"].extend(payload)
+            if fin:
+                data = bytes(frag["data"])
+                kind_op = frag["opcode"]
+                frag["opcode"] = 0
+                frag["data"] = bytearray()
+                if kind_op in (0x1, 0x2) and data:
+                    yield ("data", data)
+            continue
         if opcode in (0x1, 0x2):
-            yield ("data", payload)
+            if fin:
+                yield ("data", payload)
+            else:
+                frag["opcode"] = opcode
+                frag["data"] = bytearray(payload)
 
 
 def handle_ws_adb(client_sock, path: str) -> None:
@@ -478,6 +843,7 @@ def handle_ws_adb(client_sock, path: str) -> None:
 
     def ws_to_tcp():
         buf = bytearray()
+        frag = {"opcode": 0, "data": bytearray()}
         try:
             while not state["stop"]:
                 try:
@@ -489,7 +855,7 @@ def handle_ws_adb(client_sock, path: str) -> None:
                     stop("ws-closed-by-browser")
                     return
                 buf.extend(chunk)
-                for kind, payload in _ws_feed(buf):
+                for kind, payload in _ws_feed(buf, frag):
                     if kind == "close":
                         stop("ws-close-frame")
                         return
@@ -650,6 +1016,36 @@ class Handler(SimpleHTTPRequestHandler):
                 handle_ws_adb(self.connection, self.path)
             except Exception as e:
                 sys.stderr.write("[ws] %s\n" % e)
+            return
+        if path == "/api/app-meta":
+            qs = parse_qs(urlparse(self.path).query)
+            serial = (qs.get("serial") or [""])[0]
+            pkg = (qs.get("pkg") or [""])[0]
+            try:
+                json_response(self, 200, app_meta(serial, pkg))
+            except Exception as e:
+                json_response(self, 500, {"ok": False, "error": str(e) or "读取应用信息失败"})
+            return
+        if path == "/api/app-icon":
+            qs = parse_qs(urlparse(self.path).query)
+            serial = (qs.get("serial") or [""])[0]
+            pkg = (qs.get("pkg") or [""])[0]
+            icon = app_icon_path(serial, pkg)
+            if not icon:
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"icon not found")
+                return
+            data = icon.read_bytes()
+            ext = icon.suffix.lower()
+            ctype = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "application/octet-stream")
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
             return
         if path == "/api/status":
             json_response(self, 200, {
@@ -855,24 +1251,23 @@ class Handler(SimpleHTTPRequestHandler):
                 json_response(self, 500, {"ok": False, "error": str(e)})
             return
         if path == "/api/kill-adb":
-            # 用户主动点击:结束后台 adb 进程,释放被占用的 USB 设备
+            # WebUSB 要独占 ADB 接口：只在 adb server 真在运行时才 kill。
+            # 空跑 kill-server 会触发 adb 自己拉起再退出，造成 USB 重新枚举，
+            # 部分机器上会在投屏开始几秒后把 WebUSB 链路掐断。
             details: list[str] = []
+            changed = False
             try:
-                out = subprocess.check_output(
-                    "taskkill /F /IM adb.exe",
-                    shell=True,
-                    stderr=subprocess.STDOUT,
-                    timeout=8,
-                    text=True,
-                    errors="ignore",
-                )
-                details.append(out.strip() or "adb.exe killed")
-            except subprocess.CalledProcessError as e:
-                details.append((e.output or "adb.exe 未在运行").strip())
+                if not adb_server_running():
+                    details.append("adb server 未运行，无需释放")
+                else:
+                    out = run_bundled_adb(["kill-server"], 10)
+                    text = ((out.stdout or "") + (out.stderr or "")).strip()
+                    details.append(text or "adb server stopped")
+                    changed = out.returncode == 0 or "killed" in text.lower() or "stopped" in text.lower()
             except Exception as e:
-                details.append("taskkill fail: %s" % e)
-            wlog("kill-adb " + " | ".join(details))
-            json_response(self, 200, {"ok": True, "detail": details})
+                details.append("adb kill-server fail: %s" % e)
+            wlog("kill-adb changed=%s %s" % (changed, " | ".join(details)))
+            json_response(self, 200, {"ok": True, "changed": changed, "detail": details})
             return
 
         if path == "/api/cleanup":
@@ -980,3 +1375,10 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
+
+
+
