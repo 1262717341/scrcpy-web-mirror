@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>scrcpy 便捷网页版 · 监视器 v4.2.10</title>
+    <title>scrcpy 便捷网页版 · 监视器 v4.2.11</title>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" type="image/x-icon" href="./assets/custom-icon.ico" />
-    <link rel="stylesheet" href="./css/app.css?v=4.2.10-ui1" />
+    <link rel="stylesheet" href="./css/app.css?v=4.2.12-ui8" />
   </head>
   <body>
     <div class="app" id="app">
@@ -43,7 +43,7 @@
         <nav class="rail" id="rail" aria-label="控制台">
           <div class="rail-brand" title="scrcpy 便捷网页版 v4.2.2">
             <span class="rail-logo"><img src="./assets/logo.png" alt="scrcpy 便捷网页版" /></span>
-            <span class="rail-ver">3.0</span>
+            <span class="rail-ver" id="rail-ver">4.2.12</span>
           </div>
           <div class="rail-state" id="rail-state" data-state="offline">
             <span class="status-chip"><i class="status-dot" aria-hidden="true"></i><b id="status-short">未连接</b></span>
@@ -354,8 +354,16 @@
               <div><span class="drawer-index">03</span><h2>状态 · 日志</h2></div>
             </header>
             <div class="drawer-body body-tight">
+              <div class="dev-banner">
+                <span class="dev-chip">设备<b id="dev-name">—</b></span>
+                <span class="dev-chip">序列号<b id="stat-serial">—</b></span>
+              </div>
               <p class="section-kicker">实时指标</p>
               <div class="stat-grid">
+                <div class="stat"><span>帧率</span><b id="m-fps">—</b></div>
+                <div class="stat"><span>分辨率</span><b id="m-res">—</b></div>
+                <div class="stat"><span>画面延迟</span><b id="m-vlat">—</b></div>
+                <div class="stat"><span>声音延迟</span><b id="m-alat">—</b></div>
                 <div class="stat"><span>丢帧</span><b id="stat-vdrop">0</b></div>
                 <div class="stat"><span>帧数</span><b id="stat-frames">0</b></div>
                 <div class="stat"><span>视频</span><b id="stat-codec">H.264</b></div>
@@ -366,25 +374,7 @@
             </div>
           </section>
 
-          <!-- ===== 侧栏底部读数条（跟着侧栏走，画面内不再显示任何数字） ===== -->
-          <aside class="hud-dock" id="hud-dock" aria-hidden="true">
-            <div class="hud hud-tl">
-              <span class="hud-live"><i></i><b>画面</b> 设备状态</span>
-              <span class="hud-sub">H.264 解码</span>
-            </div>
-            <div class="hud hud-tr">
-              <span class="hud-metric"><i>分辨率</i><b id="stat-res">—</b></span>
-              <span class="hud-metric"><i>帧率</i><b id="stat-fps">—</b></span>
-            </div>
-            <div class="hud hud-bl">
-              <span id="stat-serial">设备:未连接</span>
-              <span id="audio-hint">声音:—</span>
-            </div>
-            <div class="hud hud-br">
-              <span class="hud-metric"><i>视图</i><b id="zoom-readout">适配</b></span>
-              <span class="hud-sub">自动适配</span>
-            </div>
-          </aside>
+          <!-- 底部读数条已移除：设备信息与全部指标统一收进「03 状态 · 日志」顶部 -->
         </div>
 
         <!-- ===== 全屏拖动控制面板 ===== -->
@@ -445,7 +435,7 @@
     </div>
 
     <div class="toast-root" id="toast-root"></div>
-    <script src="./js/mirror.bundle.js?v=4.2.10-ui1"></script>
+    <script src="./js/mirror.bundle.js?v=4.2.12-ui8"></script>
     <script>
       (() => {
         const app = document.getElementById("app");

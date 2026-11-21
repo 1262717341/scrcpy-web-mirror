@@ -11,6 +11,7 @@ import {
   ScrcpyVideoCodecId,
   ScrcpyInstanceId,
   ScrcpyCodecOptions,
+  ScrcpyAudioCodec,
   h264ParseConfiguration,
 } from "@yume-chan/scrcpy";
 import {
@@ -28,6 +29,8 @@ import {
 } from "@yume-chan/stream-extra";
 import { DeviceController } from "./control.js";
 import { AudioMirror } from "./audio.js";
+import { createV5AudioMetaParser } from "./audio-v5.js";
+import { translateServerLine, summarizeScrcpyOptions } from "./log-i18n.js";
 import { connectWireless, connectUsbDirect, prepareUsbServer, WirelessError } from "./wireless.js";
 
 const SERVER_URL = "./assets/scrcpy-server.jar";
@@ -100,6 +103,48 @@ function h264HasIdr(data) {
   return false;
 }
 
+/**
+ * scrcpy 5.x 音频流兼容（协议细节见 src/audio-v5.js）
+ * 关键：send_stream_meta=false 时成功路径是「12 字节帧头 + PCM」，没有 codec id 头；
+ * 失败信号只在「流提前结束且只有 4 字节」时才成立 —— 不能拿前 4 字节判断，
+ * 因为 PTS 是 µs 级系统时间，超过 2^32 µs（约 71.6 分钟）后高 32 位恰为 0x00000001，
+ * 会和 errored 信号撞车（v4.2.11 的假「设备音频错误」就是这么来的）。
+ */
+function patchV5AudioMeta(options) {
+  const codecMap = {
+    raw: ScrcpyAudioCodec.Raw,
+    opus: ScrcpyAudioCodec.Opus,
+    aac: ScrcpyAudioCodec.Aac,
+    flac: ScrcpyAudioCodec.Flac,
+  };
+  const codec = codecMap[String(options.value.audioCodec || "raw").toLowerCase()] || ScrcpyAudioCodec.Raw;
+  const makeStream = (pending, reader) =>
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(pending);
+      },
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(value);
+        } catch (e) {
+          controller.error(e);
+        }
+      },
+      cancel() {
+        try {
+          reader.cancel();
+        } catch {
+          /* 已断开 */
+        }
+      },
+    });
+  options.parseAudioStreamMetadata = createV5AudioMetaParser(codec, makeStream);
+}
 /** 手机端看门狗：唯一职责是「无线会话失联后回收 scrcpy」，状态文件都放在 tmp 目录 */
 const GUARD_PATH = "/data/local/tmp/panda_guard.sh";
 const GUARD_LOG = "/data/local/tmp/panda_guard.log";
@@ -187,8 +232,9 @@ function createRenderer() {
  * 注意：被丢的帧由解码器统一 close()，这里只负责「不画」。
  */
 class PacedRenderer {
-  constructor(inner, maxFps) {
+  constructor(inner, maxFps, hooks) {
     this.inner = inner;
+    this.hooks = hooks || {};
     // 目标帧率 30~120；maxFps=0（不限）或未设置时按 120 上限处理
     const fpsIn = Number(maxFps);
     const effective = Number.isFinite(fpsIn) && fpsIn > 0 ? fpsIn : 120;
@@ -206,6 +252,8 @@ class PacedRenderer {
   }
   draw(frame) {
     const now = performance.now();
+    // 取走这一帧对应的「视频包到达时刻」，用于统计端到端画面延迟
+    const arrived = this.hooks.takeArrival ? this.hooks.takeArrival() : 0;
     // 1ms 容差：吸收定时器与浮点舍入抖动，稳态不误丢
     if (now < this._next - 1) {
       // 到得比渲染节奏还快 = 积压追赶，丢弃保持实时
@@ -214,6 +262,9 @@ class PacedRenderer {
     }
     this._next = Math.max(this._next, now) + this.interval;
     this.rendered += 1;
+    if (arrived && this.hooks.onLatency) {
+      this.hooks.onLatency(Date.now() - arrived);
+    }
     return this.inner.draw(frame);
   }
 }
@@ -241,6 +292,12 @@ export class AdbMirror {
     this.running = false;
     this.frames = 0;
     this.startTs = 0;
+    // 实时指标：视频包到达时刻队列 / 端到端画面延迟(EMA) / 滑动窗口帧率
+    this._pktArrivals = [];
+    this._latencyMs = null;
+    this._fpsWinStart = 0;
+    this._fpsWinCount = 0;
+    this._fps = "0";
     this._size = { width: 0, height: 0 };
     this._stopRequested = false;
     this.credentialStore = new AdbWebCredentialStore("PandaTestLocal");
@@ -996,6 +1053,32 @@ export class AdbMirror {
     }
   }
 
+  /**
+   * 读取设备友好名称（用于状态页顶部展示）。
+   * 优先 Xiaomi 的 marketname（如「Xiaomi 17 Pro」），否则「品牌 + 型号」。
+   */
+  async readDeviceName() {
+    if (this._deviceLabel) return this._deviceLabel;
+    const np = this.adb?.subprocess?.noneProtocol;
+    if (!np) return "";
+    const prop = async (key) => {
+      try {
+        return String(await np.spawnWaitText(["getprop", key]) || "").trim();
+      } catch {
+        return "";
+      }
+    };
+    const brand = await prop("ro.product.brand");
+    const model = await prop("ro.product.model");
+    const market = await prop("ro.product.marketname");
+    let label = market || [brand, model].filter(Boolean).join(" ");
+    if (label && model && !label.toLowerCase().includes(String(model).toLowerCase())) {
+      label += " " + model;
+    }
+    this._deviceLabel = label;
+    return label;
+  }
+
   /** 读取 Android API 等级（用于判断是否支持 audio-dup） */
   async getAndroidSdk() {
     if (this._sdk) return this._sdk;
@@ -1283,7 +1366,14 @@ export class AdbMirror {
     const { renderer, kind } = createRenderer();
     this.rendererKind = kind;
     // 限速包装：丢积压帧，防「几倍加速快进」
-    this.pacedRenderer = new PacedRenderer(renderer, (this._opts || {}).maxFps);
+    this.pacedRenderer = new PacedRenderer(renderer, (this._opts || {}).maxFps, {
+      takeArrival: () => (this._pktArrivals.length ? this._pktArrivals.shift() : 0),
+      onLatency: (ms) => {
+        if (!Number.isFinite(ms) || ms < 0 || ms > 5000) return;
+        // EMA 平滑，避免单帧抖动让读数乱跳
+        this._latencyMs = this._latencyMs == null ? ms : this._latencyMs * 0.7 + ms * 0.3;
+      },
+    });
     this.decoder = new WebCodecsVideoDecoder({
       codec: ScrcpyVideoCodecId.H264,
       renderer: this.pacedRenderer,
@@ -1422,7 +1512,13 @@ export class AdbMirror {
         options.value.cameraFacing = source === "camera_front" ? "front" : "back";
       } catch { /* ignore */ }
     }
-    this.onLog("scrcpy options " + JSON.stringify({
+    // v4.2.11：scrcpy 5.0.1 + send_stream_meta=false 时音频流没有 codec id 头，
+    // 旧客户端解析会把首帧 PTS=0 误判成「音频被禁用」，导致电脑端无声。
+    if (audioOn) {
+      patchV5AudioMeta(options);
+      this.onLog("已应用 scrcpy 5.x 音频流兼容补丁（跳过音频 codec id 预读）");
+    }
+    this.onLog(summarizeScrcpyOptions({
       serverVersion: options.version,
       maxSize: o.maxSize || 1280,
       fps: o.maxFps || 60,
@@ -1446,13 +1542,18 @@ export class AdbMirror {
       this.onLog(guardReady ? "看门狗布防完成（与启动并行，不占连接时间）" : "看门狗未布防，断网时只能靠重连后清理");
     }
 
-    const logSink = (msg) => this.onLog(String(msg));
+    const logSink = (msg) => this.onLog(translateServerLine(String(msg)));
     this.client.output
       .pipeTo(
         new WritableStream({
           write(chunk) {
             console.debug("[scrcpy]", chunk);
-            logSink(chunk);
+            // 服务端可能一次吐多行，逐行翻译后再进日志面板
+            String(chunk)
+              .split(/\r?\n/)
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .forEach((line) => logSink(line));
           },
         })
       )
@@ -1490,16 +1591,24 @@ export class AdbMirror {
     }
     try {
       if (audioOn && this.client.audioStream) {
+        // 音频重同步等事件直接进日志面板，方便对照音画不同步
+        this.audio.onLog = (m) => this.onLog(String(m));
         const audioMeta = await this.client.audioStream;
         const audioResult = await this.audio.start(audioMeta);
+        const modeZh = (m) => {
+          const s = String(m || "");
+          if (s.startsWith("pcm")) return "PCM 原始";
+          if (s.startsWith("webcodecs:")) return "WebCodecs " + s.slice("webcodecs:".length).toUpperCase();
+          return s || "未知";
+        };
         if (audioResult?.ok) {
-          this.onStats({ ...this._stats(), audio: audioResult.mode });
+          this.onStats({ ...this._stats(), audio: modeZh(audioResult.mode) });
           // 延迟回报一帧统计，便于排查无声
           setTimeout(() => {
             const st = this.audio?.stats;
             this.onStats({
               ...this._stats(),
-              audio: `${audioResult.mode} pkt=${st?.packets || 0} drop=${st?.dropped || 0}${st?.err && st.err !== "—" ? " " + st.err : ""}`,
+              audio: `音频 ${modeZh(audioResult.mode)} · 收包 ${st?.packets || 0} · 缓冲 ${st?.bufferedMs != null ? st.bufferedMs + "ms" : "—"} · 欠载 ${st?.underruns || 0} · 削减 ${st?.dropped || 0}${st?.err && st.err !== "—" ? " · 异常 " + st.err : ""}`,
             });
           }, 1500);
         } else {
@@ -1535,8 +1644,8 @@ export class AdbMirror {
               }
             }
             if (packet?.type === "data" && !packet.keyframe && h264HasIdr(packet.data)) {
+              // 每 10 秒一个 I 帧都会命中，属于稳态行为，不再写日志刷屏
               packet.keyframe = true;
-              logPacketConfig("已按 IDR NAL 修正关键帧标记");
             }
             controller.enqueue(packet);
           },
@@ -1555,6 +1664,18 @@ export class AdbMirror {
               }
             } else if (packet?.type === "data") {
               this.frames += 1;
+              // 记到达时刻给渲染端算延迟；解码器内部丢帧时队列会偏长，做上限保护
+              this._pktArrivals.push(Date.now());
+              if (this._pktArrivals.length > 150) this._pktArrivals.splice(0, this._pktArrivals.length - 150);
+              // 滑动窗口帧率（每 500ms 结算一次），比「全程平均」更能反映当前状态
+              if (!this._fpsWinStart) this._fpsWinStart = performance.now();
+              this._fpsWinCount += 1;
+              const winMs = performance.now() - this._fpsWinStart;
+              if (winMs >= 500) {
+                this._fps = ((this._fpsWinCount * 1000) / winMs).toFixed(1);
+                this._fpsWinStart = performance.now();
+                this._fpsWinCount = 0;
+              }
               if (first) {
                 first = false;
                 this.onFirstFrame(this._size);
@@ -1580,13 +1701,20 @@ export class AdbMirror {
     this.startTs = performance.now();
     this.status("投屏中");
     this.onStats(this._stats());
+    // 画面静止时收不到新帧，指标会僵住；用 500ms 心跳补齐声音延迟等读数
+    if (this._statsTimer) clearInterval(this._statsTimer);
+    this._statsTimer = setInterval(() => {
+      if (this.running) {
+        try { this.onStats(this._stats()); } catch { /* ignore */ }
+      }
+    }, 500);
     this.client.exited.then(() => {
       const upSec = this.startTs ? Math.round((performance.now() - this.startTs) / 1000) : 0;
       const lastAge = this._diagLastPacketAt ? Math.round((Date.now() - this._diagLastPacketAt) / 1000) : -1;
       this.onLog(
-        `scrcpy 控制通道已退出 stopReq=${this._stopRequested} 运行=${upSec}s 帧=${this.frames} ` +
-        `最后视频包=${lastAge >= 0 ? lastAge + "s 前(" + this._diagLastPacketKind + ")" : "无"} ` +
-        `解码错误=${this._diagLastDecoderError || "无"} USB事件=${this._diagUsbEvent || "无"}`
+        `控制通道退出 · 主动停止=${this._stopRequested ? "是" : "否"} · 运行 ${upSec}s · 累计 ${this.frames} 帧 · ` +
+        `最后一帧视频包 ${lastAge >= 0 ? lastAge + "s 前（" + (this._diagLastPacketKind || "未知") + "）" : "无"} · ` +
+        `解码错误 ${this._diagLastDecoderError || "无"} · USB 事件 ${this._diagUsbEvent || "无"}`
       );
       if (!this._stopRequested) {
         this.running = false;
@@ -1594,9 +1722,9 @@ export class AdbMirror {
         this.cleanupAfterDrop("scrcpy 控制通道退出").catch(() => {});
       }
     }).catch((e) => {
-      const output = Array.isArray(e?.output) ? e.output.slice(-8).join(" | ") : "";
-      const reason = "scrcpy 控制通道异常：" + String(e?.name || "Error") + ": " + String(e?.message || e) +
-        (output ? "；server 输出=" + output : "");
+      const output = Array.isArray(e?.output) ? e.output.slice(-8).map((l) => translateServerLine(String(l))).join(" | ") : "";
+      const reason = "控制通道异常：" + String(e?.name || "错误") + ": " + String(e?.message || e) +
+        (output ? "；服务端输出 " + output : "");
       this.onLog(reason);
       if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {});
     });
@@ -1618,13 +1746,15 @@ export class AdbMirror {
 
   _stats() {
     const elapsed = (performance.now() - this.startTs) / 1000;
-    const fps = elapsed > 0 && this.frames ? (this.frames / elapsed).toFixed(1) : "0";
+    const avgFps = elapsed > 0 && this.frames ? (this.frames / elapsed).toFixed(1) : "0";
     return {
       frames: this.frames,
-      fps,
+      fps: this._fps && this._fps !== "0" ? this._fps : avgFps,
       vdrop: this.pacedRenderer ? this.pacedRenderer.dropped : 0,
       width: this._size.width,
       height: this._size.height,
+      latencyMs: this._latencyMs == null ? null : Math.round(this._latencyMs),
+      audioLatency: this.audio?.latencyMs ?? null,
       running: this.running,
       renderer: this.rendererKind,
     };
@@ -1646,6 +1776,10 @@ export class AdbMirror {
     this._dropHandled = true;
     this._cleaned = true;
     this.running = false;
+    if (this._statsTimer) {
+      clearInterval(this._statsTimer);
+      this._statsTimer = null;
+    }
     if (this._lateTimer) {
       clearTimeout(this._lateTimer);
       this._lateTimer = null;

@@ -1,7 +1,11 @@
 /**
  * scrcpy 音频
  * 优先 raw PCM（最稳），否则 Opus/AAC + WebCodecs
+ *
+ * v4.2.12：raw PCM 改为 AudioWorklet 硬件时钟播放（见 pcm-worklet.js），
+ * 不再用 AudioBufferSource 排程 + 追赶，从根上消除「卡一下」的重同步。
  */
+import { PCM_PROCESSOR_NAME, pcmWorkletUrl } from "./pcm-worklet.js";
 export class AudioMirror {
   constructor() {
     this.ctx = null;
@@ -19,6 +23,14 @@ export class AudioMirror {
     this._rms = 0;
     this._sources = new Set();
     this._dropped = 0;
+    this._resync = 0;
+    this._syncMsg = "";
+    this.onLog = null;
+    this.sink = null;
+    this._bufferedMs = 0;
+    this._underruns = 0;
+    this._trimmedTotal = 0;
+    this._lastTrimLog = 0;
   }
 
   get stats() {
@@ -30,15 +42,33 @@ export class AudioMirror {
       muted: this.muted,
       rms: this._rms || 0,
       dropped: this._dropped || 0,
+      resync: this._resync || 0,
+      bufferedMs: this.sink ? this._bufferedMs : null,
+      underruns: this._underruns || 0,
+      latencyMs: this.latencyMs,
       err: this._lastErr || "—",
     };
+  }
+
+  /** 当前音频缓冲延迟（毫秒）：待播缓冲 + 声卡输出延迟 */
+  get latencyMs() {
+    if (!this.ctx || !this.playing) return null;
+    try {
+      const out = (this.ctx.outputLatency || this.ctx.baseLatency || 0) * 1000;
+      if (this.sink) return Math.round((this._bufferedMs || 0) + out);
+      const ahead = Math.max(0, this._nextTime - this.ctx.currentTime) * 1000;
+      return Math.round(ahead + out);
+    } catch {
+      return null;
+    }
   }
 
   async ensureContext() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) throw new Error("AudioContext 不可用");
-      this.ctx = new AC({ latencyHint: "playback", sampleRate: 48000 });
+      // interactive：让浏览器用最小的输出缓冲，降低声音延迟；抖动靠 _schedule 的自动重排兜底
+      this.ctx = new AC({ latencyHint: "interactive", sampleRate: 48000 });
       this.gain = this.ctx.createGain();
       this.gain.gain.value = 1;
       this.gain.connect(this.ctx.destination);
@@ -173,7 +203,100 @@ export class AudioMirror {
     return { ok: true, mode: "webcodecs:" + config.codec, codec: config.codec };
   }
 
+  /**
+   * 剥掉 scrcpy 5.x 逐包 12 字节帧头（pts u64 BE + len u32 BE）。
+   * 只在该包里「len 恰好等于 总长-12」时剥离，误判概率约 1/2^32，不会破坏正常 PCM。
+   */
+  _stripPacketHeader(bytes) {
+    if (bytes.byteLength < 16) return bytes;
+    try {
+      const len = new DataView(bytes.buffer, bytes.byteOffset, 12).getUint32(8, false);
+      if (len > 0 && len === bytes.byteLength - 12) return bytes.subarray(12);
+    } catch {
+      /* 保持原样 */
+    }
+    return bytes;
+  }
+
   _startPcmLoop(stream) {
+    if (this.ctx?.audioWorklet && typeof AudioWorkletNode !== "undefined") {
+      this._startPcmWorklet(stream).catch((e) => {
+        this._lastErr = String(e?.message || e);
+        console.warn("[audio] worklet 启动失败，退回排程播放", e);
+        try { this.sink?.disconnect(); } catch { /* ignore */ }
+        this.sink = null;
+        this._startPcmLoopLegacy(stream);
+      });
+      return;
+    }
+    this._startPcmLoopLegacy(stream);
+  }
+
+  /** 硬件时钟播放：主线程只管灌 PCM，取走由 worklet 按真实采样率完成 */
+  async _startPcmWorklet(stream) {
+    await this.ctx.audioWorklet.addModule(pcmWorkletUrl());
+    const node = new AudioWorkletNode(this.ctx, PCM_PROCESSOR_NAME, {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+      processorOptions: {
+        sampleRate: this._rate,
+        channels: 2,
+        primeMs: 45,   // 起播先攒 45ms，避免每个包边界插静音
+        maxMs: 150,    // 超过 150ms 才削，正常抖动根本碰不到
+        targetMs: 40,
+      },
+    });
+    this.sink = node;
+    node.connect(this.gain);
+    node.port.onmessage = (e) => {
+      const d = e.data || {};
+      if (d.type !== "status") return;
+      this._bufferedMs = d.bufferedMs || 0;
+      this._underruns = d.underruns || 0;
+      if (d.trimmedMs >= 15) {
+        this._dropped += 1;
+        this._trimmedTotal += d.trimmedMs;
+        const now = Date.now();
+        // 削减是异常事件，10 秒内只报一次，避免刷屏
+        if (now - this._lastTrimLog > 10000) {
+          this._lastTrimLog = now;
+          try {
+            this.onLog?.(`声音缓冲削减 ${Math.round(d.trimmedMs)}ms（积压超过 150ms，已削回 40ms）`);
+          } catch { /* ignore */ }
+        }
+      }
+    };
+
+    (async () => {
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value?.data) continue;
+        this._packets += 1;
+        if (this.muted) continue;
+        const bytes = this._stripPacketHeader(value.data);
+        const pairs = bytes.byteLength >> 2; // 立体声 16bit：4 字节 1 帧
+        if (pairs < 1) continue;
+        const f32 = new Float32Array(pairs * 2);
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        let sum = 0;
+        for (let i = 0; i < pairs * 2; i += 1) {
+          const s = view.getInt16(i * 2, true) / 32768;
+          f32[i] = s;
+          sum += s * s;
+        }
+        this._framesOut += pairs;
+        this._rms = Math.sqrt(sum / (pairs * 2));
+        node.port.postMessage({ type: "pcm", samples: f32 }, [f32.buffer]);
+      }
+    })().catch((e) => {
+      this._lastErr = String(e?.message || e);
+    });
+  }
+
+  _startPcmLoopLegacy(stream) {
     (async () => {
       const reader = stream.getReader();
       while (true) {
@@ -284,16 +407,22 @@ export class AudioMirror {
     if (!this.ctx || this.muted) return;
     try {
       const now = this.ctx.currentTime;
-      // 排程落后（卡顿后追帧）或超前太多（抖动后积压）都直接重排
-      if (!this._nextTime || this._nextTime < now - 0.05 || this._nextTime > now + 0.6) {
+      // v4.2.12：声音延迟从 279ms 压到 50ms 档。
+      // 旧逻辑把积压上限设成 250ms、超了只丢单帧，积压就永久钉在 250ms，
+      // 结果「画面 17ms、声音 279ms」——音画差 260ms，必然不同步。
+      const targetAhead = 0.04; // 起播/重同步后保留的缓冲（≈ 1~2 个包，USB 抖动够用）
+      const maxAhead = 0.12;    // 超过就主动压缩，宁可跳一小段也要对齐画面
+      const aheadMs = (this._nextTime - now) * 1000;
+      if (!this._nextTime || this._nextTime < now - 0.02 || aheadMs > maxAhead * 1000) {
         this._flushSources();
-        this._nextTime = now + 0.06;
-      }
-      // 已经积压超过 250ms：这一帧直接丢掉，不再往后排。
-      // 宁可丢音也不要加速追帧，否则越追越乱。
-      if (this._nextTime - now > 0.25) {
+        this._nextTime = now + targetAhead;
+        if (aheadMs > 80) {
+          this._resync += 1;
+          this._syncMsg = "声音重同步：积压 " + Math.round(aheadMs) + "ms → 压缩到 " +
+            Math.round(targetAhead * 1000) + "ms（第 " + this._resync + " 次）";
+          try { this.onLog?.(this._syncMsg); } catch { /* ignore */ }
+        }
         this._dropped += 1;
-        return;
       }
       const src = this.ctx.createBufferSource();
       src.buffer = buffer;
@@ -322,6 +451,11 @@ export class AudioMirror {
 
   async stop() {
     this.playing = false;
+    try {
+      this.sink?.port.postMessage({ type: "reset" });
+      this.sink?.disconnect();
+    } catch { /* ignore */ }
+    this.sink = null;
     this._flushSources();
     this._nextTime = 0;
     try {

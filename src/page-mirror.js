@@ -15,6 +15,7 @@ import {
 } from "../src/wireless.js";
 import { bindDevicePanels } from "./device-panel.js";
 import { ADB_IME_ID, DeviceTextInput, hasNonAscii } from "./text-input.js";
+import { translateServerLine } from "./log-i18n.js";
 
 const SETTINGS_KEY = "pandatest-mirror-settings-v1";
 const IME_AUTO_KEY = "pandatest-ime-auto-v1";
@@ -128,20 +129,55 @@ function shotToast(result) {
   logLine("ok", "截屏 " + path);
 }
 
+// 日志面板：一行一条、全中文、重复行合并计数，兼顾「详细」与「简洁」
+let _logLast = { text: "", node: null, count: 1, at: 0 };
+
 function logLine(level, msg) {
   const box = $("log-box");
   const time = new Date().toLocaleTimeString();
-  const text = "[" + time + "] " + msg;
-  if (!box) {
-    console.log(text);
-    return;
+  const lines = String(msg == null ? "" : msg)
+    .split(/\r?\n/)
+    .map((l) => translateServerLine(l))
+    .filter((l) => l);
+  if (!lines.length) return;
+  for (const one of lines) {
+    const text = "[" + time + "] " + one;
+    if (!box) {
+      console.log(text);
+      continue;
+    }
+    const now = Date.now();
+    if (_logLast.node && _logLast.text === one && now - _logLast.at < 15000) {
+      _logLast.count += 1;
+      _logLast.at = now;
+      _logLast.node.textContent = "[" + time + "] " + one + "（重复 " + _logLast.count + " 次）";
+      continue;
+    }
+    const line = document.createElement("div");
+    line.className = "log-line " + level;
+    line.textContent = text;
+    line.title = text;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+    _logLast = { text: one, node: line, count: 1, at: now };
+    while (box.childNodes.length > 400) box.removeChild(box.firstChild);
   }
-  const line = document.createElement("div");
-  line.className = "log-line " + level;
-  line.textContent = text;
-  box.appendChild(line);
-  box.scrollTop = box.scrollHeight;
-  while (box.childNodes.length > 500) box.removeChild(box.firstChild);
+}
+
+/* ---------- 设备信息（放进「03 状态 · 日志」最顶部） ---------- */
+async function refreshDeviceBanner() {
+  const nameEl = $("dev-name");
+  if (!nameEl || nameEl.dataset.filled === "1") return;
+  try {
+    const label = await mirror?.readDeviceName?.();
+    if (label) {
+      nameEl.textContent = label;
+      nameEl.dataset.filled = "1";
+      nameEl.title = label;
+    }
+  } catch {
+    /* 读不到型号就保持占位，不影响投屏 */
+  }
 }
 
 /* ---------- 连接向导步骤 ---------- */
@@ -478,43 +514,9 @@ function fitCanvas() {
   positionHud(canvas);
 }
 
-/* 让四角读数贴在画面外侧的净空里：左列对齐画面左边、右列对齐画面右边，
- * 上排落在画面上方的留白、下排落在画面下方的留白——任何比例下都不压住画面。 */
-function positionHud(canvas) {
-  // 读数已收进侧栏底部浮条（#hud-dock）：由 CSS 定位，不再按画面坐标摆放
-  if (document.getElementById("hud-dock")) return;
-  const layout = document.getElementById("mirror-layout");
-  if (!layout || !canvas) return;
-  const tl = document.querySelector(".hud-tl");
-  const bl = document.querySelector(".hud-bl");
-  const tr = document.querySelector(".hud-tr");
-  const br = document.querySelector(".hud-br");
-  if (!tl || !bl || !tr || !br) return;
-  const cr = canvas.getBoundingClientRect();
-  const ar = layout.getBoundingClientRect();
-  if (!cr.width || !cr.height || !ar.width) return;
-
-  const gap = 6;
-  const left = Math.round(cr.left - ar.left);
-  const right = Math.round(ar.right - cr.right);
-  const top = Math.round(cr.top - ar.top);
-  const bottom = Math.round(cr.bottom - ar.top);
-  const frameW = Math.round(cr.width);
-
-  // 量一次实际高度（两行读数约 30px，单行约 14px），再据此贴边，换字号也不会越界
-  const hOf = (el) => Math.round(el.getBoundingClientRect().height) || 30;
-  const clampTop = (value, height) => Math.max(2, Math.min(value, Math.round(ar.height - height - 2)));
-
-  [tl, tr, bl, br].forEach((el) => { el.style.maxWidth = frameW + "px"; });
-
-  tl.style.left = left + "px";
-  tl.style.top = clampTop(top - hOf(tl) - gap, hOf(tl)) + "px";
-  tr.style.right = right + "px";
-  tr.style.top = clampTop(top - hOf(tr) - gap, hOf(tr)) + "px";
-  bl.style.left = left + "px";
-  bl.style.top = clampTop(bottom + gap, hOf(bl)) + "px";
-  br.style.right = right + "px";
-  br.style.top = clampTop(bottom + gap, hOf(br)) + "px";
+/* 底部读数条已移除：设备信息与全部指标统一收进「03 状态 · 日志」顶部 */
+function positionHud() {
+  return;
 }
 
 function setViewRotate(deg) {
@@ -912,9 +914,27 @@ const mirror = new AdbMirror({
     }
     if ($("stat-frames")) $("stat-frames").textContent = String(s.frames ?? 0);
     if ($("stat-fps")) $("stat-fps").textContent = s.fps != null ? String(s.fps) : "—";
+    if ($("m-fps")) $("m-fps").textContent = s.fps != null && s.fps !== "0" ? s.fps + " fps" : "—";
+    if ($("m-res")) $("m-res").textContent = s.width && s.height ? s.width + "×" + s.height : "—";
+    if ($("m-vlat")) {
+      $("m-vlat").textContent = s.latencyMs != null ? s.latencyMs + " ms" : "—";
+      $("m-vlat").title = "从视频包到达电脑到画到屏幕的端到端延迟（含解码+渲染节奏控制）";
+    }
+    if ($("m-alat")) {
+      $("m-alat").textContent = s.audioLatency != null ? s.audioLatency + " ms" : "—";
+      $("m-alat").title = "已排程音频缓冲 + 声卡输出延迟；越小越实时，过小会断续";
+    }
     if ($("stat-vdrop")) $("stat-vdrop").textContent = String(s.vdrop ?? 0);
-    if ($("stat-codec") && s.renderer) $("stat-codec").textContent = "H.264 · " + s.renderer;
-    if ($("stat-audio") && s.audio) $("stat-audio").textContent = s.audio;
+    if ($("stat-codec") && s.renderer) {
+      const rendererZh = { webgl: "WebGL", bitmap: "位图" }[String(s.renderer)] || s.renderer;
+      $("stat-codec").textContent = "H.264 · " + rendererZh;
+    }
+    if ($("stat-audio") && s.audio) {
+      // 面板窄，格子只放短标签；收包/缓冲/欠载等明细放 title，鼠标悬停可看全
+      const short = String(s.audio).split(" · ")[0];
+      $("stat-audio").textContent = short;
+      $("stat-audio").title = String(s.audio);
+    }
     if ($("audio-hint") && s.audio) $("audio-hint").textContent = "声音:" + s.audio;
     fitCanvas();
   },
@@ -1248,8 +1268,9 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
       }
     }
     if (mirror.device?.serial && $("stat-serial")) {
-      $("stat-serial").textContent = "设备:" + mirror.device.serial;
+      $("stat-serial").textContent = String(mirror.device.serial);
     }
+    refreshDeviceBanner();
     toast("USB 连接成功");
     logLine("ok", "USB 连接成功");
   } catch (err) {
@@ -1356,7 +1377,8 @@ async function connectWifi() {
       }
     }
     await mirror.startWireless(target, opts);
-    if ($("stat-serial")) $("stat-serial").textContent = "设备:" + target;
+    if ($("stat-serial")) $("stat-serial").textContent = String(target);
+    refreshDeviceBanner();
     toast("无线连接成功", target);
     logLine("ok", "无线连接成功 " + target);
     startWifiKeepAlive(target);
@@ -2107,6 +2129,12 @@ window.addEventListener("pagehide", () => {
   await refreshUsbDevices(true);
   mirror.prefetchServerJar();
   logLine("info", "页面已就绪 · 设置已加载");
+  // 左侧图标下的版本号改为运行时读取服务端版本，避免写死成 3.0
+  try {
+    const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+    const rv = document.getElementById("rail-ver");
+    if (rv && st && st.version) rv.textContent = String(st.version);
+  } catch { /* 服务不可用时保留 HTML 里的占位版本号 */ }
 })();
 
 /* ---------- 快捷键:H 全屏 · M 静音 · Shift+Esc 停止 ---------- */
