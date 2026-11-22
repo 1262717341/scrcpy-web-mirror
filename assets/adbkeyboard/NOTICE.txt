@@ -1,0 +1,23 @@
+ADBKeyboard（中文输入插件）
+==========================
+
+组件名：ADBKeyboard
+包名：com.android.adbkeyboard
+版本：2.5-dev（releases/tag/v2.5-dev，含 Android 16 兼容修复）
+作者：senzhk
+源码：https://github.com/senzhk/ADBKeyBoard
+许可证：GNU General Public License v2.0（全文见同目录 LICENSE）
+
+用途：
+    作为安卓输入法运行，通过 ADB_INPUT_B64 广播接收电脑端发来的 UTF-8 文本，
+    用 InputConnection.commitText() 直接写入当前输入框，使中文/emoji 不经过
+    手机剪贴板也能上屏。
+
+修改情况：
+    本安装包内附的是上游发布的原始 APK（keyboardservice-debug.apk），未做任何
+    修改、重签名或反编译。scrcpy 便捷网页版只负责在用户确认后把它推送到手机、
+    启用并切换为当前输入法，不与其代码发生链接。
+
+分发说明：
+    该组件以独立程序形式随安装包分发（mere aggregation）。根据 GPL-2.0，
+    完整源码可从上述仓库获取；如需要离线源码包，可另行提供。

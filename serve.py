@@ -27,14 +27,10 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="ignore")
 
-import threading
-import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-
-import os
 from datetime import datetime
 
 WIRELESS_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wireless.log")
@@ -56,7 +52,7 @@ def wlog(msg: str) -> None:
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PANDA_PORT", "8765"))
 BIND = "127.0.0.1"
-APP_VERSION = "4.2.12"
+APP_VERSION = "4.3.1"
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 # v4.2.3：应用名/图标解析的临时文件不再落到用户可见的 /sdcard，改放 shell 可写的临时目录。
@@ -162,6 +158,9 @@ def _meta_lock(serial: str, pkg: str) -> threading.Lock:
     with _APP_META_GUARD:
         lock = _APP_META_LOCKS.get(key)
         if lock is None:
+            # 简单淘汰：超过阈值清空字典。调用方已持有锁对象引用，清空不影响正在进行的请求。
+            if len(_APP_META_LOCKS) >= 500:
+                _APP_META_LOCKS.clear()
             lock = threading.Lock()
             _APP_META_LOCKS[key] = lock
         return lock
@@ -532,33 +531,12 @@ def _listener_pids() -> list[int]:
     return pids
 
 
-def _project_pids() -> list[int]:
-    """进程由服务状态、PID 文件和监听端口定位，不再枚举命令行。"""
-    return []
-
-
 def _collect_targets() -> list[int]:
-    """并行读取监听端口和项目目标，避免外部命令拖慢关机。"""
-    got: dict[str, list[int]] = {}
-
-    def worker(key, fn):
-        try:
-            got[key] = fn()
-        except Exception:
-            got[key] = []
-
-    threads = [
-        threading.Thread(target=worker, args=("listen", _listener_pids), daemon=True),
-        threading.Thread(target=worker, args=("proj", _project_pids), daemon=True),
-    ]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(3.0)
-    out: list[int] = []
-    for key in ("listen", "proj"):
-        out += got.get(key, [])
-    return out
+    """读取监听本服务端口的进程 PID（带超时）。"""
+    try:
+        return _listener_pids()
+    except Exception:
+        return []
 
 
 def kill_project_processes() -> dict:
@@ -652,8 +630,7 @@ def ensure_single_instance() -> str:
             targets.append(int(st["pid"]))
     except (TypeError, ValueError):
         pass
-    targets += _listener_pids()
-    targets += _project_pids()
+    targets += _collect_targets()
 
     killed: list[int] = []
     me = os.getpid()
@@ -704,10 +681,48 @@ def _verify_self(timeout: float = 6.0) -> None:
 import base64
 import hashlib
 import selectors
-import socket
-from urllib.parse import urlparse, parse_qs
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+def is_allowed_ws_target(target: str) -> bool:
+    """WS 桥目标白名单：仅本机 adb server(5037) 或私网设备的 5555 端口。
+    阻断把本地服务当任意内网/公网 TCP 代理（SSRF）。
+    """
+    try:
+        host, port_s = target.rsplit(":", 1)
+        port = int(port_s)
+    except (ValueError, AttributeError):
+        return False
+    if not (1 <= port <= 65535):
+        return False
+    if port == 5037:
+        return host in ("127.0.0.1", "localhost", "::1")
+    if port != 5555:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return bool(
+        ip.is_private or ip.is_link_local
+    ) and not ip.is_loopback and not ip.is_multicast
+
+
+def origin_allowed(handler) -> bool:
+    """来源校验：允许无 Origin（本地 CLI/同源请求），拒绝外部 Origin（DNS rebinding/CSRF）。"""
+    origin = (handler.headers.get("Origin") or "").strip()
+    if not origin:
+        return True
+    try:
+        o = urlparse(origin)
+        host = (o.hostname or "").lower()
+        port = o.port or (443 if o.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        return False
+    return port == PORT
 
 
 def _ws_accept(key: str) -> str:
@@ -808,16 +823,16 @@ def handle_ws_adb(client_sock, path: str) -> None:
     target = (q.get("target") or [""])[0]
     wlog("WS bridge open " + path)
 
-    if ":" not in target:
+    if not is_allowed_ws_target(target):
         try:
-            _ws_send(client_sock, b"bad target", 0x8)
+            _ws_send(client_sock, b"target not allowed", 0x8)
         except Exception:
             pass
         try:
             client_sock.close()
         except Exception:
             pass
-        wlog("bad target " + target)
+        wlog("WS target rejected " + target)
         return
 
     host, port_s = target.rsplit(":", 1)
@@ -1011,11 +1026,43 @@ def wifi_scan(port: int = 5555, timeout: float = 2.0) -> list:
 
 
 
+# 静态服务只暴露前端运行所需目录，源码/日志/pid/依赖一律不可下载。
+WEB_PUBLIC_DIRS = {"assets", "css", "js", "shortcut-icons", "docs"}
+WEB_PUBLIC_FILES = {"index.html", "control.html", "favicon.ico"}
+_BLOCKED_SUFFIXES = (".py", ".log", ".pid", ".json", ".md", ".mjs", ".ts", ".map", ".zip", ".exe", ".dll", ".pyd")
+
+
+def web_path_allowed(rel: str) -> bool:
+    """rel 为 url 路径（已去掉前导 /）。"""
+    rel = (rel or "").split("?", 1)[0]
+    if not rel or rel in ("", "."):
+        return True
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if not parts:
+        return True
+    if any(p == ".." for p in parts):
+        return False
+    if len(parts) == 1 and parts[0] in WEB_PUBLIC_FILES:
+        return True
+    if parts[0] not in WEB_PUBLIC_DIRS:
+        return False
+    if any(p.lower().endswith(_BLOCKED_SUFFIXES) for p in parts):
+        return False
+    return True
+
+
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "ScrcpyWeb/3.0"
+    server_version = "ScrcpyWeb/" + APP_VERSION
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def send_head(self):
+        rel = urlparse(self.path).path.lstrip("/")
+        if not web_path_allowed(rel):
+            self.send_error(404, "Not Found")
+            return None
+        return super().send_head()
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("[http] %s\n" % (fmt % args))
@@ -1033,6 +1080,13 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         # WebSocket upgrade for wireless ADB bridge
         if path == "/ws/adb" and self.headers.get("Upgrade", "").lower() == "websocket":
+            if not origin_allowed(self):
+                self.send_response(403)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"forbidden origin")
+                wlog("WS rejected origin=" + str(self.headers.get("Origin")))
+                return
             key = self.headers.get("Sec-WebSocket-Key", "")
             accept = _ws_accept(key) if key else ""
             self.send_response(101)
@@ -1089,6 +1143,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         path = urlparse(self.path).path
+        if not origin_allowed(self):
+            json_response(self, 403, {"ok": False, "error": "forbidden origin"})
+            wlog("POST rejected origin=" + str(self.headers.get("Origin")) + " path=" + path)
+            return
         if path == "/api/shutdown":
             # 先回包再收尾：清理动作放后台，保证浏览器一定拿到 200，进程必定退出
             json_response(self, 200, {
@@ -1103,6 +1161,28 @@ class Handler(SimpleHTTPRequestHandler):
             wlog("shutdown requested")
             threading.Thread(target=self._exit_soon, daemon=True).start()
             return
+        if path == "/api/tcp-probe":
+            # 无线连接前置快探：2 秒内判定目标 TCP 端口是否可达。
+            # 避免不可达目标走 12s adb connect + 30s ADB 握手的慢失败路径。
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else b"{}"
+            try:
+                data = json.loads(body.decode("utf-8") or "{}")
+                target = str(data.get("target") or "").strip()
+            except Exception:
+                target = ""
+            if not is_allowed_ws_target(target):
+                json_response(self, 200, {"ok": False, "error": "目标地址不被允许"})
+                return
+            try:
+                host, port_text = target.rsplit(":", 1)
+                with socket.create_connection((host, int(port_text)), timeout=2):
+                    pass
+                json_response(self, 200, {"ok": True})
+            except OSError as e:
+                json_response(self, 200, {"ok": False, "error": str(e)})
+            return
+
         if path == "/api/wifi-scan":
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b"{}"
@@ -1234,10 +1314,14 @@ class Handler(SimpleHTTPRequestHandler):
                 raw = _b64.b64decode(data.get("data") or "")
                 name = data.get("name") or ("shot-%s.png" % int(time.time()))
                 name = os.path.basename(name)
+                if name in ("", ".", "..") or name != os.path.basename(name):
+                    raise ValueError("invalid file name")
                 # C:\Users\<user>\Pictures
-                pic = os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Pictures")
-                os.makedirs(pic, exist_ok=True)
-                out = os.path.join(pic, name)
+                pic_root = os.path.realpath(os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Pictures"))
+                os.makedirs(pic_root, exist_ok=True)
+                out = os.path.join(pic_root, name)
+                if os.path.commonpath([os.path.realpath(out), pic_root]) != pic_root:
+                    raise ValueError("path traversal blocked")
                 with open(out, "wb") as f:
                     f.write(raw)
                 # thumbnail data-url (small)
@@ -1261,20 +1345,35 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if path == "/api/open-shot":
+            if not origin_allowed(self):
+                json_response(self, 403, {"ok": False, "error": "forbidden origin"})
+                return
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b"{}"
             try:
                 data = json.loads(body.decode("utf-8") or "{}")
                 file_path = data.get("path") or ""
-                if not os.path.isfile(file_path):
-                    json_response(self, 400, {"ok": False, "error": "file not found"})
+                # 仅允许打开本服务保存到 Pictures 的截图（白名单：图片扩展名 + realpath 在 Pictures 内）
+                pic_root = os.path.realpath(os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Pictures"))
+                real = os.path.realpath(file_path)
+                ext = os.path.splitext(real)[1].lower()
+                if (
+                    not os.path.isfile(real)
+                    or ext not in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
+                    or os.path.commonpath([real, pic_root]) != pic_root
+                ):
+                    json_response(self, 400, {"ok": False, "error": "仅允许打开 Pictures 中的截图"})
                     return
-                # Windows: explorer /select,path
+                # Windows: explorer /select,path；否则只允许图片，不再走 startfile 执行任意文件
                 try:
-                    subprocess.Popen(["explorer", "/select," + file_path])
+                    subprocess.Popen(
+                        ["explorer", "/select," + real],
+                        creationflags=CREATE_NO_WINDOW,
+                    )
                 except Exception:
-                    os.startfile(file_path)  # type: ignore
-                json_response(self, 200, {"ok": True, "path": file_path})
+                    if os.name == "nt":
+                        os.startfile(real)  # type: ignore
+                json_response(self, 200, {"ok": True, "path": real})
             except Exception as e:
                 json_response(self, 500, {"ok": False, "error": str(e)})
             return

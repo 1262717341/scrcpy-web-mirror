@@ -6,7 +6,7 @@
  * 是一个不显示界面的输入法，收到 `ADB_INPUT_B64` 广播后用 InputConnection
  * 直接把整段文字 commit 到当前输入框，汉字/emoji 都能过，不依赖剪贴板。
  */
-import { AdbShell, DeviceApps, shellQuote } from "./device-tools.js";
+import { AdbShell, DeviceApps } from "./device-tools.js";
 
 export const ADB_IME_PACKAGE = "com.android.adbkeyboard";
 export const ADB_IME_ID = "com.android.adbkeyboard/.AdbIME";
@@ -83,6 +83,7 @@ export class DeviceTextInput {
     this.shell = new AdbShell(adb);
     this.previousIme = "";
     this.active = false;
+    this._restoring = null;
   }
 
   get ready() {
@@ -127,6 +128,15 @@ export class DeviceTextInput {
     if (current === ADB_IME_ID) {
       this.active = true;
       if (!this.previousIme) this.previousIme = readPrevIme(this.serial);
+      // 页面刷新后手机仍停在 ADB 输入法、且无任何记忆：主动选一个非 ADB 输入法存起来，
+      // 否则断开时 restore 只能随机兜底，可能切到用户不想要的输入法。
+      if (!this.previousIme || this.previousIme === ADB_IME_ID) {
+        const fallback = await this.pickFallbackIme();
+        if (fallback) {
+          this.previousIme = fallback;
+          storePrevIme(this.serial, fallback);
+        }
+      }
       return;
     }
     if (current) {
@@ -150,8 +160,15 @@ export class DeviceTextInput {
     return ids.find((id) => id !== ADB_IME_ID) || "";
   }
 
-  /** 恢复手机原来的输入法 */
-  async restore() {
+  /** 恢复手机原来的输入法（幂等：并发调用共享同一次恢复） */
+  restore() {
+    if (!this._restoring) {
+      this._restoring = this._doRestore().finally(() => { this._restoring = null; });
+    }
+    return this._restoring;
+  }
+
+  async _doRestore() {
     if (!this.ready) {
       this.active = false;
       return "";
@@ -202,14 +219,5 @@ export class DeviceTextInput {
     );
     if (/Error/i.test(out)) throw new Error(out.trim());
     return out.trim();
-  }
-
-  /** 清空当前输入框内容（可选，用于「替换」场景） */
-  async clearViaKeyevents(count) {
-    const n = Math.max(0, Math.min(200, Number(count) || 0));
-    if (!n) return;
-    const seq = [];
-    for (let i = 0; i < n; i += 1) seq.push("input keyevent 67");
-    await this.shell.sh(seq.join("; "), 30000);
   }
 }

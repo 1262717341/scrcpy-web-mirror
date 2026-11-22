@@ -11,7 +11,8 @@ await esbuild.build({
   format: "iife",
   platform: "browser",
   target: ["chrome110", "edge110"],
-  sourcemap: true,
+  // 生产包不带 sourcemap（避免源码结构随静态目录暴露）；保持未压缩以兼容测试脚本对函数名/字符串的断言
+  sourcemap: false,
   minify: false,
   logLevel: "info",
 });

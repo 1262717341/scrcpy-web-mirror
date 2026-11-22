@@ -512,12 +512,10 @@ export function bindDevicePanels({ getMirror, toast, log }) {
     }
   }
 
-  async function installApk(file) {
-    if (!file) return;
-    if (appsBusy) return toast("还有操作正在进行", "请稍后再试");
-    appsBusy = true;
-    const btn = $("btn-app-install");
-    if (btn) btn.disabled = true;
+  // 无锁内核：调用方若已持有其它操作锁（如 uploadFiles 的 filesBusy），直接调用本函数，
+  // 避免两把独立锁互相踩踏导致"提示成功却没装"。
+  async function doInstallApk(file) {
+    if (!file) return false;
     setAppsStatus("正在推送到手机…");
     let installed = false;
     try {
@@ -538,11 +536,23 @@ export function bindDevicePanels({ getMirror, toast, log }) {
       setAppsStatus("安装失败：" + String(e?.message || e));
       toast("安装失败", String(e?.message || e));
       log("error", "安装失败 " + String(e?.message || e));
+    }
+    if (installed) await refreshApps();
+    return installed;
+  }
+
+  async function installApk(file) {
+    if (!file) return false;
+    if (appsBusy) return toast("还有操作正在进行", "请稍后再试"), false;
+    appsBusy = true;
+    const btn = $("btn-app-install");
+    if (btn) btn.disabled = true;
+    try {
+      return await doInstallApk(file);
     } finally {
       appsBusy = false;
       if (btn) btn.disabled = false;
     }
-    if (installed) await refreshApps();
   }
 
   /* ---------------- 文件 ---------------- */
@@ -966,7 +976,8 @@ export function bindDevicePanels({ getMirror, toast, log }) {
       for (const file of items) {
         if (/\.apk$/i.test(file.name)) {
           setFilesStatus("检测到 APK，转去安装：" + file.name);
-          await installApk(file);
+          const ok = await doInstallApk(file);
+          if (!ok) throw new Error("APK 安装失败：" + file.name);
           continue;
         }
         const target = joinPath(filesPath, file.name);
@@ -1243,6 +1254,13 @@ export function bindDevicePanels({ getMirror, toast, log }) {
       apps = null;
       appsAdb = null;
       appsCache = [];
+      // 清空元数据请求队列与并发计数，否则残留的 appActive 会让重连后的 pumpAppQueue 永久停摆
+      appQueue.length = 0;
+      appActive = 0;
+      if (appScrollBody) {
+        appScrollBody.removeEventListener("scroll", loadVisibleAppRows);
+        appScrollBody = null;
+      }
       files = null;
       filesAdb = null;
       filesEntries = [];

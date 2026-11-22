@@ -10,14 +10,36 @@ export function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
 }
 
-/** 规范化设备路径：合并多余斜杠，去掉末尾斜杠（根目录除外） */
+/** 规范化设备路径：解析 . 与 ..，合并多余斜杠，去掉末尾斜杠（根目录除外） */
 export function normalizePath(input, base = DEFAULT_DIR) {
   let path = String(input == null ? "" : input).trim();
   if (!path) path = base;
   if (!path.startsWith("/")) path = (base.replace(/\/+$/, "") || "") + "/" + path;
-  path = path.replace(/\/{2,}/g, "/");
-  if (path.length > 1) path = path.replace(/\/+$/, "");
-  return path || "/";
+  const parts = [];
+  for (const seg of path.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") { parts.pop(); continue; }
+    parts.push(seg);
+  }
+  return "/" + parts.join("/");
+}
+
+/**
+ * 安全路径守卫：所有设备侧文件操作必须先过此关。
+ * normalizePath 已解析 ..，这里再校验结果不得越出 root。
+ */
+export function resolveSafePath(input, root = DEFAULT_DIR) {
+  const base = normalizePath(root);
+  let target = normalizePath(input, base);
+  // /sdcard 与 /storage/emulated/0 是同一目录，统一归一到 root
+  const alias = "/storage/emulated/0";
+  if (target === alias) target = base;
+  else if (target.startsWith(alias + "/")) target = base + target.slice(alias.length);
+  const prefix = base === "/" ? "/" : base + "/";
+  if (target !== base && !target.startsWith(prefix)) {
+    throw new Error("路径超出允许范围（仅限 " + base + "）");
+  }
+  return target;
 }
 
 export function joinPath(dir, name) {
@@ -292,7 +314,7 @@ export class DeviceFiles {
   }
 
   async list(path) {
-    const dir = normalizePath(path);
+    const dir = resolveSafePath(path);
     const entries = await this._withSync((sync) => sync.readdir(dir));
     const mapped = entries
       .filter((entry) => entry.name !== "." && entry.name !== "..")
@@ -313,11 +335,11 @@ export class DeviceFiles {
   }
 
   async stat(path) {
-    return await this._withSync((sync) => sync.lstat(normalizePath(path)));
+    return await this._withSync((sync) => sync.lstat(resolveSafePath(path)));
   }
 
   async readBlob(path, onProgress) {
-    const target = normalizePath(path);
+    const target = resolveSafePath(path);
     const chunks = [];
     let received = 0;
     await this._withSync(async (sync) => {
@@ -345,7 +367,7 @@ export class DeviceFiles {
   }
 
   async writeBlob(path, blob, onProgress, options = {}) {
-    const target = normalizePath(path);
+    const target = resolveSafePath(path);
     let sent = 0;
     const file = blob.stream().pipeThrough(
       new TransformStream({
@@ -361,21 +383,24 @@ export class DeviceFiles {
   }
 
   async mkdir(path) {
-    const out = await this.shell.run(["mkdir", "-p", shellQuote(normalizePath(path))]);
+    const out = await this.shell.run(["mkdir", "-p", shellQuote(resolveSafePath(path))]);
     return out.trim();
   }
 
   async remove(path, recursive = true) {
-    const target = normalizePath(path);
-    if (target === "/" || target === "/sdcard" || target === "/storage/emulated/0") {
+    const target = resolveSafePath(path);
+    if (target === DEFAULT_DIR || target === "/storage/emulated/0") {
       throw new Error("不允许删除该目录");
     }
     return await this.shell.run(["rm", "-" + (recursive ? "rf" : "f"), shellQuote(target)], 30000);
   }
 
   async rename(from, to) {
-    const src = normalizePath(from);
-    const dst = normalizePath(to);
+    const src = resolveSafePath(from);
+    const dst = resolveSafePath(to);
+    if (src === DEFAULT_DIR || dst === DEFAULT_DIR) {
+      throw new Error("不允许重命名内部存储根目录");
+    }
     const out = await this.shell.run(["mv", shellQuote(src), shellQuote(dst)], 30000);
     return out.trim();
   }
@@ -385,9 +410,9 @@ export class DeviceFiles {
    * 目标由调用方负责生成不冲突的名字；这里只拦“把目录复制进自身子目录”这类必然递归的错误。
    */
   async copy(from, to) {
-    const src = normalizePath(from);
-    const dst = normalizePath(to);
-    if (src === "/" || src === "/sdcard" || src === "/storage/emulated/0") {
+    const src = resolveSafePath(from);
+    const dst = resolveSafePath(to);
+    if (src === DEFAULT_DIR || src === "/storage/emulated/0") {
       throw new Error("不允许复制该目录");
     }
     if (src === dst) throw new Error("源和目标相同");
@@ -399,7 +424,7 @@ export class DeviceFiles {
   }
 
   async mediaScan(path) {
-    const target = normalizePath(path);
+    const target = resolveSafePath(path);
     try {
       await this.shell.run([
         "am",

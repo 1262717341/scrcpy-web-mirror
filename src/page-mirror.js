@@ -313,6 +313,8 @@ function scheduleUsbReconnect(reason) {
 let usbGuardWorker = null;
 let usbGuardFallback = null;
 let usbGuardBusy = false;
+// 有线直连复用本机 adb server，不能被 WebUSB 独占守护误杀
+let usbDirectMode = false;
 function stopUsbGuard() {
   if (usbGuardFallback) clearInterval(usbGuardFallback);
   usbGuardFallback = null;
@@ -323,6 +325,7 @@ function stopUsbGuard() {
   usbGuardBusy = false;
 }
 async function guardUsbExclusive() {
+  if (usbDirectMode) return;
   if (usbGuardBusy || mode !== "usb" || (!mirror.running && !usbStarting) || usbManualStop) return;
   usbGuardBusy = true;
   try {
@@ -356,7 +359,6 @@ let mode = "usb";
 let wifiKeepAlive = null;
 let usbManualStop = false;
 let usbStarting = false;
-let usbConnectedAt = 0;
 let usbAutoRetries = 0;
 let usbRetryTimer = null;
 let usbStableTimer = null;
@@ -438,6 +440,38 @@ function setFsButtonLabel(onFs) {
   if (span) span.textContent = label;
   const fsLbl = $("btn-fs-fullscreen")?.querySelector(".lbl3");
   if (fsLbl) fsLbl.textContent = label;
+}
+
+/* 统一快捷键：H 全屏 · M 静音 · I/V 沉浸 · O 折叠 · Esc 退出沉浸 · Shift+Esc 停止。
+   返回 true 表示该按键已被快捷键消费，调用方不得再把它当文本发往手机。 */
+function handleShortcut(e) {
+  if (e.repeat || e.defaultPrevented) return false;
+  if (e.key === "Escape" && e.shiftKey) {
+    e.preventDefault();
+    $("btn-stop")?.click();
+    return true;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  const key = String(e.key || "").toLowerCase();
+  if (key === "h") { e.preventDefault(); toggleFullscreen(); return true; }
+  if (key === "m") { e.preventDefault(); $("btn-mute")?.click(); return true; }
+  const ui = window.__appUI;
+  if (key === "i" || key === "v") {
+    e.preventDefault();
+    ui?.setFocus?.();
+    return true;
+  }
+  if (key === "o") {
+    e.preventDefault();
+    ui?.toggleRailDrawer?.();
+    return true;
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    ui?.setFocus?.(false);
+    return true;
+  }
+  return false;
 }
 
 /* 断线与重连前先解绑画布/键盘监听，避免同一个指针或一次输入被多轮闭包重复处理。 */
@@ -697,6 +731,9 @@ function bindKeyboardSink(controller, canvas) {
   sink.addEventListener("keydown", async (e) => {
     if (e.isComposing || composing) return;
 
+    // 快捷键优先：点过画面后焦点在 key-sink，H/M/I/V/O/Esc 仍应生效，不能再当文本发往手机
+    if (handleShortcut(e)) return;
+
     // Ctrl+V：把电脑剪贴板内容送到手机
     if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
       e.preventDefault();
@@ -832,7 +869,6 @@ const mirror = new AdbMirror({
     if (mirroring) {
       usbStarting = false;
       if (mode === "usb") {
-        usbConnectedAt = Date.now();
         if (!usbGuardWorker && !usbGuardFallback) startUsbGuard();
         clearTimeout(usbStableTimer);
         usbStableTimer = setTimeout(() => {
@@ -897,6 +933,7 @@ const mirror = new AdbMirror({
   onStats(s) {
     // 解码器画布是方向变化的第一现场：横竖屏切换后先用画布尺寸纠正 _size，
     // 再刷新状态栏，避免底部一直显示旧方向的分辨率。
+    let sizeChanged = false;
     const liveCanvas = document.querySelector("#stage canvas");
     if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0 && (s.frames ?? 0) > 0) {
       const cw = Number(liveCanvas.width);
@@ -904,13 +941,15 @@ const mirror = new AdbMirror({
       if (cw !== s.width || ch !== s.height) {
         s = { ...s, width: cw, height: ch };
         try { mirror._size = { width: cw, height: ch }; } catch { /* mirror 可能尚未就绪 */ }
+        sizeChanged = true;
       }
     }
     if ($("stat-res")) {
       const sizeTxt = s.width && s.height ? s.width + "×" + s.height : "—";
-      const o = collectOptions();
+      // 只读需要的那一项，避免每 500ms 跑一遍 collectOptions 重读 9 个设置项
+      const maxSize = numOr($("opt-res")?.value, 1280);
       $("stat-res").textContent =
-        o.maxSize > 0 ? sizeTxt + " (限制" + o.maxSize + ")" : sizeTxt + " (原始)";
+        maxSize > 0 ? sizeTxt + " (限制" + maxSize + ")" : sizeTxt + " (原始)";
     }
     if ($("stat-frames")) $("stat-frames").textContent = String(s.frames ?? 0);
     if ($("stat-fps")) $("stat-fps").textContent = s.fps != null ? String(s.fps) : "—";
@@ -936,7 +975,8 @@ const mirror = new AdbMirror({
       $("stat-audio").title = String(s.audio);
     }
     if ($("audio-hint") && s.audio) $("audio-hint").textContent = "声音:" + s.audio;
-    fitCanvas();
+    // 仅在尺寸变化时重排画布：每 500ms 无条件 fitCanvas 会触发强制同步布局
+    if (sizeChanged) fitCanvas();
   },
   onFirstFrame() {
     if ($("placeholder")) $("placeholder").style.display = "none";
@@ -1223,7 +1263,6 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
   stopUsbGuard();
   clearTimeout(usbStableTimer);
   usbStarting = true;
-  usbConnectedAt = 0;
   hideOffline();
   const opts = collectOptions();
   const preferSerial = $("usb-device-select")?.value || null;
@@ -1839,6 +1878,17 @@ if (location.search.includes("debug")) {
     restore: () => (textInput ? textInput.restore() : Promise.resolve("")),
   };
   window.__ctrl = () => ctrl;
+  // 有线直连测试入口：已实现但未接 UI，自动化通过 ?debug 调用
+  window.__startUsbDirect = async (serial) => {
+    usbDirectMode = true;
+    setMode("usb");
+    hideOffline();
+    if ($("placeholder-text")) $("placeholder-text").textContent = "有线直连中…";
+    logLine("info", "有线直连(测试) " + (serial || "auto"));
+    await mirror.startUsbDirect(serial || null, collectOptions());
+    refreshDeviceBanner();
+    return { serial: mirror.device?.serial || "", status: "ok" };
+  };
 }
 
 /* ---------- 文本框:输入自动上屏(IME 组合结束后再发) ---------- */
@@ -2137,18 +2187,10 @@ window.addEventListener("pagehide", () => {
   } catch { /* 服务不可用时保留 HTML 里的占位版本号 */ }
 })();
 
-/* ---------- 快捷键:H 全屏 · M 静音 · Shift+Esc 停止 ---------- */
+/* ---------- 快捷键统一入口（sink 与各输入框聚焦时由各处 keydown 转发）---------- */
 window.addEventListener("keydown", (e) => {
+  // 已在 key-sink 中处理过的不重复触发；普通输入框（如 file-path）聚焦时不抢快捷键
   const tag = (e.target?.tagName || "").toLowerCase();
-  const typing = tag === "input" || tag === "textarea" || e.target?.isContentEditable;
-  if (e.key === "Escape" && e.shiftKey) {
-    $("btn-stop")?.click();
-    return;
-  }
-  if (typing) return;
-  if (e.key === "h" || e.key === "H") {
-    toggleFullscreen();
-  } else if (e.key === "m" || e.key === "M") {
-    $("btn-mute")?.click();
-  }
+  if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+  handleShortcut(e);
 });

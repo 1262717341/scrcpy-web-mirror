@@ -30,7 +30,7 @@ import {
 import { DeviceController } from "./control.js";
 import { AudioMirror } from "./audio.js";
 import { createV5AudioMetaParser } from "./audio-v5.js";
-import { translateServerLine, summarizeScrcpyOptions } from "./log-i18n.js";
+import { summarizeScrcpyOptions } from "./log-i18n.js";
 import { connectWireless, connectUsbDirect, prepareUsbServer, WirelessError } from "./wireless.js";
 
 const SERVER_URL = "./assets/scrcpy-server.jar";
@@ -150,6 +150,10 @@ const GUARD_PATH = "/data/local/tmp/panda_guard.sh";
 const GUARD_LOG = "/data/local/tmp/panda_guard.log";
 const GUARD_HB = "/data/local/tmp/panda_hb";
 const GUARD_RUN = "/data/local/tmp/panda_run";
+/** 投屏前系统设置快照：由手机端看门狗在失联时自恢复，覆盖拔线/断网后 ADB 通道已死的场景 */
+const SETTINGS_SNAPSHOT = "/data/local/tmp/panda_settings";
+/** 输入法恢复目标（无快照时的兜底）：ADBKeyboard 之外的第一个已启用输入法 */
+const ADB_KEYBOARD_ID = "com.android.adbkeyboard/.AdbIME";
 
 /**
  * 看门狗判据只有两条，够用且不会误杀：
@@ -284,6 +288,8 @@ export class AdbMirror {
     this._opts = {};
     this.adb = null;
     this.client = null;
+    // 启动代次：stop/清理会把在途启动作废，避免旧启动在 await 后访问已释放的 client
+    this._startEpoch = 0;
     this.decoder = null;
     this.device = null;
     this.canvas = null;
@@ -308,6 +314,9 @@ export class AdbMirror {
     this._cleaned = false;
     this._lateTimer = null;
     this._lateActive = false;
+    // USB 场景内部心跳：无线由 page-mirror 的 Worker 写，USB 没有保活逻辑，
+    // 由这里补一个定时器，否则 USB 布防的看门狗会在 60s 后误判失联。
+    this._guardHeartbeatTimer = null;
     this.muted = false;
     // v4.0.23：无线投屏时 scrcpy 的 stay_awake 依赖“插电常亮”，手机没插电仍会息屏。
     // 这里在投屏期间临时把系统息屏时间拉到最大，停止/断线时恢复，避免把用户设置改坏。
@@ -818,6 +827,64 @@ export class AdbMirror {
     }
   }
 
+  /**
+   * 把投屏前的系统设置快照写入手机端文件，供看门狗在失联时自恢复。
+   * 关键点：此刻 ADB 通道还活着，且必须在 applyWirelessAwake / 输入法切换之前调用，
+   * 读到的是用户投屏前的真实值。拔线/断网后 PC 端再无通道，只有手机端能执行恢复。
+   * 文件内容是可被 sh `.` 直接 source 的 KEY=VALUE，值来自系统命令，均为安全字符。
+   */
+  async snapshotDeviceSettings() {
+    if (!this.adb) return false;
+    try {
+      const out = String(
+        (await this.deviceShell(
+          'ime=$(settings get secure default_input_method 2>/dev/null); ' +
+            'case "$ime" in ""|null) ime=$(ime list -s 2>/dev/null | grep -v "' + ADB_KEYBOARD_ID + '" | head -n 1);; esac; ' +
+            'timeout=$(settings get system screen_off_timeout 2>/dev/null); ' +
+            'case "$timeout" in ""|*[!0-9]*) timeout="";; esac; ' +
+            'echo "IME=$ime"; echo "TIMEOUT=$timeout"',
+          8000
+        )) || ""
+      );
+      const ime = (/IME=(.*)/.exec(out) || [])[1]?.trim() || "";
+      const timeout = (/TIMEOUT=(\d+)/.exec(out) || [])[1] || "";
+      if (!ime && !timeout) {
+        this.onLog("设置快照读取为空，看门狗将无法自恢复输入法/息屏时间");
+        return false;
+      }
+      // 写入手机端：只保留安全字符，避免注入（输入法 id 仅含字母数字点斜杠下划线冒号）
+      const safeIme = ime.replace(/[^A-Za-z0-9._\/:]/g, "");
+      const safeTimeout = /^\d+$/.test(timeout) ? timeout : "";
+      const body = "IME=" + safeIme + "\nTIMEOUT=" + safeTimeout + "\n";
+      let bin = "";
+      const bytes = new TextEncoder().encode(body);
+      for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      await this.deviceShell(
+        "echo '" + b64 + "' | base64 -d > " + SETTINGS_SNAPSHOT + " 2>/dev/null; true",
+        6000
+      );
+      this.onLog(
+        "已保存设置快照到手机（输入法 " + (safeIme || "未知") + " / 息屏 " +
+          (safeTimeout ? Math.round(Number(safeTimeout) / 1000) + "秒" : "未知") + "）"
+      );
+      return true;
+    } catch (e) {
+      this.onLog("设置快照保存失败 " + (e?.message || e));
+      return false;
+    }
+  }
+
+  /** 正常停止成功后清除手机端快照，避免看门狗后续误恢复 */
+  async clearDeviceSettingsSnapshot() {
+    if (!this.adb) return;
+    try {
+      await this.deviceShell("rm -f " + SETTINGS_SNAPSHOT + " 2>/dev/null; true", 5000);
+    } catch {
+      /* ignore */
+    }
+  }
+
   async restoreWirelessAwake() {
     const saved = this._awakeSaved ?? this._readAwakeStored();
     if (!this._awakeApplied && saved == null) return true;
@@ -962,6 +1029,19 @@ export class AdbMirror {
       '    pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null',
       // 只做净音量不变的「路由刷新」：不动勿扰、不按键、不改用户音量
       "    " + AUDIO_ROUTE_CMD,
+      // 恢复投屏前改过的系统设置：输入法 + 息屏时间。
+      // 这是失联后 PC 端通道已死时唯一的恢复途径（拔线/断网都覆盖）。
+      // 快照文件在投屏启动时写入，恢复成功即删除，保证幂等、不误伤新会话。
+      '    if [ -f "' + SETTINGS_SNAPSHOT + '" ]; then',
+      '      . "' + SETTINGS_SNAPSHOT + '" 2>/dev/null',
+      '      if [ -n "$IME" ]; then ime set "$IME" >/dev/null 2>&1; fi',
+      '      case "$TIMEOUT" in',
+      '        ""|*[!0-9]*) ;;',
+      '        *) settings put system screen_off_timeout "$TIMEOUT" >/dev/null 2>&1 ;;',
+      "      esac",
+      '      rm -f "' + SETTINGS_SNAPSHOT + '" 2>/dev/null',
+      '      log "restored settings ime=$IME timeout=$TIMEOUT"',
+      "    fi",
       '    remain=$(ps -A 2>/dev/null | grep -c "[c]om.genymobile.scrcpy")',
       '    log "released remain=$remain"',
       "    exit 0",
@@ -1004,6 +1084,22 @@ export class AdbMirror {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** USB 场景启停内部心跳（无线场景由 page-mirror 的 Worker 负责，避免重复写） */
+  startGuardHeartbeat() {
+    this.stopGuardHeartbeat();
+    if (this._wirelessTarget) return; // 无线已有 Worker 心跳
+    this._guardHeartbeatTimer = setInterval(() => {
+      if (this.running) void this.heartbeat();
+    }, 5000);
+  }
+
+  stopGuardHeartbeat() {
+    if (this._guardHeartbeatTimer) {
+      clearInterval(this._guardHeartbeatTimer);
+      this._guardHeartbeatTimer = null;
     }
   }
 
@@ -1198,11 +1294,15 @@ export class AdbMirror {
           this.onLog("看门狗未留下日志：本轮可能未启动成功（若日志常出现此行请反馈）");
         }
         const ok = await this.releaseSessionOnDevice();
+        // 重新上线时补恢复输入法/息屏时间：断网瞬间这些命令发不出去，
+        // 现在通道回来了，把残留状态清干净，避免手机长期停在 ADB 输入法或常亮。
+        await this._runBeforeTeardown();
+        await this.restoreWirelessAwake();
         this._lateActive = false;
         this.onLog(
           ok
-            ? "手机已重新上线，已结束残留 scrcpy 并刷新音频路由，声音应已恢复"
-            : "手机已上线但未能结束 scrcpy，请点顶栏「恢复声音」"
+            ? "手机已重新上线，已结束残留 scrcpy、刷新音频路由并恢复输入法/息屏时间"
+            : "手机已上线并恢复输入法/息屏时间，但未能结束 scrcpy，请点顶栏「恢复声音」"
         );
         return;
       } catch {
@@ -1222,10 +1322,12 @@ export class AdbMirror {
 
   /** 非用户主动停止的断线：停止播放 + 释放手机端音频占用 + 清掉舞台画面 */
   async cleanupAfterDrop(reason) {
+    this._startEpoch += 1; // 断线清理同样作废在途启动
     if (this._dropHandled || this._cleaned) return;
     this._dropHandled = true;
     this._cleaned = true;
     this.running = false;
+    this.stopGuardHeartbeat();
     this.onLog("连接中断原因：" + reason);
     // 断开就该无画面：立即停解码器、移除画布，不留冻住的最后一帧
     this._teardownRenderer();
@@ -1234,8 +1336,11 @@ export class AdbMirror {
     } catch {
       /* ignore */
     }
-    this.audio = new AudioMirror();
-    // 链路还活着时直接清；已断则只能靠手机端看门狗/重连后清
+    this.audio = new AudioMirror({ muted: this.muted });
+    // 关键顺序：输入法/息屏恢复必须在 restoreWirelessAudio（其内部会 this.adb = null）
+    // 之前执行。旧版把 _runBeforeTeardown 放在无线重连之后，通道已被置空，恢复必然失败，
+    // 手机就残留在 ADB 输入法 —— 这是异常断开后输入法不恢复的直接原因。
+    await this._runBeforeTeardown();
     await this.restoreWirelessAwake();
     await this.releaseScrcpyOnDevice();
     if (this._wirelessTarget) {
@@ -1247,12 +1352,11 @@ export class AdbMirror {
         this.onLog("手机声音已恢复");
       } else {
         this.onLog(
-          "手机已离网，无法远程清理：手机端看门狗会在后台结束 scrcpy；重新联网后若仍无声，按一次音量键即可"
+          "手机已离网，无法远程清理：手机端看门狗会在后台结束 scrcpy 并恢复输入法/息屏时间；重新联网后若仍无声，按一次音量键即可"
         );
         this._scheduleLateCleanup();
       }
     }
-    await this._runBeforeTeardown();
     try {
       await this.adb?.close();
     } catch {
@@ -1262,6 +1366,31 @@ export class AdbMirror {
     await this._closeUsbHandle();
     this.deviceController = null;
     this.status("已断开");
+  }
+
+  /**
+   * 无线连接前置 TCP 快探：服务端 2s 超时判定目标端口可达性，
+   * 避免不可达目标走 12s adb connect + 30s ADB 握手的慢失败路径（约 31s）。
+   * 旧版 serve.py 未实现该端点（404）时静默跳过，保持向后兼容。
+   */
+  async probeWirelessTarget(target) {
+    try {
+      const resp = await fetch("/api/tcp-probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+      if (!resp.ok) return; // 旧服务端无此端点，沿用原流程
+      const data = await resp.json();
+      if (data.ok) return;
+      throw new MirrorError(
+        "目标不可达：" + (data.error || "请确认手机已开启无线调试且 IP 正确"),
+        "TARGET_UNREACHABLE"
+      );
+    } catch (err) {
+      if (err instanceof MirrorError && err.code === "TARGET_UNREACHABLE") throw err;
+      // 探测请求自身失败（服务未升级/网络抖动）不阻断原连接流程
+    }
   }
 
   async pushServerWireless(target) {
@@ -1406,6 +1535,7 @@ export class AdbMirror {
 
   async startStream() {
     if (!this.adb) throw new MirrorError("ADB 未连接", "NO_ADB");
+    const epoch = ++this._startEpoch;
     this._stopRequested = false;
     this._dropHandled = false;
     this._cleaned = false;
@@ -1459,13 +1589,13 @@ export class AdbMirror {
     }
 
     // 上一轮的 scrcpy / 看门狗已由 prepareDevice 在一次 shell 里清掉。
-    // 无线的看门狗布防改为与 scrcpy 启动并行：原来它是串行 6 个往返 + 2 次 sleep，是连接慢的主因。
-    const guardTask = this._wirelessTarget
-      ? this.deployAudioGuard().catch((e) => {
-          this.onLog("看门狗布防异常（不影响投屏）：" + (e?.message || e));
-          return false;
-        })
-      : Promise.resolve(false);
+    // 看门狗布防与 scrcpy 启动并行，不占连接时间。USB 场景同样布防：
+    // 拔线后 WebUSB 通道立即失效，PC 端恢复命令发不出去，只能靠手机端看门狗兜底恢复设置。
+    // 无线布防判据含「Wi-Fi IP 消失」，USB 布防靠心跳过期判失联（心跳由内部定时器/Worker 持续写）。
+    const guardTask = this.deployAudioGuard().catch((e) => {
+      this.onLog("看门狗布防异常（不影响投屏）：" + (e?.message || e));
+      return false;
+    });
     await this.pushServer();
     this._mountRenderer();
 
@@ -1537,13 +1667,23 @@ export class AdbMirror {
     }
     this.client = await AdbScrcpyClient.start(this.adb, DefaultServerPath, options);
     if (!this.client) throw new MirrorError("scrcpy 客户端启动失败", "SCRCPY_FAIL");
+    // 本地持有引用：stop() 可能在 await 期间把 this.client 置空，后续不能从实例字段再取
+    const client = this.client;
     if (this._wirelessTarget) {
       const guardReady = await guardTask;
+      if (epoch !== this._startEpoch) {
+        try { await client.close(); } catch { /* ignore */ }
+        throw new MirrorError("启动已被新请求取消", "STALE_START");
+      }
       this.onLog(guardReady ? "看门狗布防完成（与启动并行，不占连接时间）" : "看门狗未布防，断网时只能靠重连后清理");
     }
+    if (epoch !== this._startEpoch) {
+      try { await client.close(); } catch { /* ignore */ }
+      throw new MirrorError("启动已被新请求取消", "STALE_START");
+    }
 
-    const logSink = (msg) => this.onLog(translateServerLine(String(msg)));
-    this.client.output
+    const logSink = (msg) => this.onLog(String(msg)); // 翻译统一在 page-mirror.js 的 logLine 完成
+    client.output
       .pipeTo(
         new WritableStream({
           write(chunk) {
@@ -1559,19 +1699,24 @@ export class AdbMirror {
       )
       .catch(() => {});
 
-    const videoStream = await this.client.videoStream;
+    const videoStream = await client.videoStream;
     if (!videoStream) throw new MirrorError("scrcpy 未返回视频流", "NO_VIDEO");
 
+    // 视频流就绪 = 投屏真正建立。此刻 ADB 通道活着，先把投屏前的输入法/息屏时间
+    // 快照写到手机端，供看门狗在拔线/断网后自恢复；必须在改设置之前读原值。
+    await this.snapshotDeviceSettings();
     // v4.0.23：视频流就绪后再改息屏时间，启动失败不会留下被改过的系统设置。
     await this.applyWirelessAwake();
+    this.startGuardHeartbeat();
 
     const { metadata, stream: packetStream } = videoStream;
+    this._videoStream = packetStream; // 真实视频包流，供 watchChannel 监听关闭
     this._size = {
       width: metadata?.width || 0,
       height: metadata?.height || 0,
     };
 
-    this.deviceController = new DeviceController(this.client, {
+    this.deviceController = new DeviceController(client, {
       width: () => this._size.width,
       height: () => this._size.height,
     }, this.adb);
@@ -1590,10 +1735,11 @@ export class AdbMirror {
       this.onStats({ ...this._stats(), audio: "未转发（手机原样出声）" });
     }
     try {
-      if (audioOn && this.client.audioStream) {
+      if (audioOn && client.audioStream) {
         // 音频重同步等事件直接进日志面板，方便对照音画不同步
         this.audio.onLog = (m) => this.onLog(String(m));
-        const audioMeta = await this.client.audioStream;
+        const audioMeta = await client.audioStream;
+        this._audioStream = audioMeta?.stream || null; // 真实音频包流
         const audioResult = await this.audio.start(audioMeta);
         const modeZh = (m) => {
           const s = String(m || "");
@@ -1708,7 +1854,7 @@ export class AdbMirror {
         try { this.onStats(this._stats()); } catch { /* ignore */ }
       }
     }, 500);
-    this.client.exited.then(() => {
+    client.exited.then(() => {
       const upSec = this.startTs ? Math.round((performance.now() - this.startTs) / 1000) : 0;
       const lastAge = this._diagLastPacketAt ? Math.round((Date.now() - this._diagLastPacketAt) / 1000) : -1;
       this.onLog(
@@ -1722,7 +1868,7 @@ export class AdbMirror {
         this.cleanupAfterDrop("scrcpy 控制通道退出").catch(() => {});
       }
     }).catch((e) => {
-      const output = Array.isArray(e?.output) ? e.output.slice(-8).map((l) => translateServerLine(String(l))).join(" | ") : "";
+      const output = Array.isArray(e?.output) ? e.output.slice(-8).map((l) => String(l)).join(" | ") : "";
       const reason = "控制通道异常：" + String(e?.name || "错误") + ": " + String(e?.message || e) +
         (output ? "；服务端输出 " + output : "");
       this.onLog(reason);
@@ -1740,8 +1886,8 @@ export class AdbMirror {
         if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {});
       });
     };
-    watchChannel(this.videoStream, "视频通道");
-    watchChannel(this.audioStream, "音频通道");
+    watchChannel(this._videoStream, "视频通道");
+    watchChannel(this._audioStream, "音频通道");
   }
 
   _stats() {
@@ -1772,10 +1918,12 @@ export class AdbMirror {
   }
 
   async stop() {
+    this._startEpoch += 1; // 作废在途启动，避免旧启动在 await 后访问已释放资源
     this._stopRequested = true;
     this._dropHandled = true;
     this._cleaned = true;
     this.running = false;
+    this.stopGuardHeartbeat();
     if (this._statsTimer) {
       clearInterval(this._statsTimer);
       this._statsTimer = null;
@@ -1797,7 +1945,7 @@ export class AdbMirror {
     }
     this.deviceController = null;
     try { await this.audio?.stop(); } catch { /* ignore */ }
-    this.audio = new AudioMirror();
+    this.audio = new AudioMirror({ muted: this.muted });
     // 顺序很重要：先让 scrcpy 收尾、再在手机端一次性清理，最后才断 ADB / 无线通道。
     // 旧版先把无线通道 dispose 掉，清理命令发不出去，只能等看门狗兜底。
     try {
@@ -1822,6 +1970,8 @@ export class AdbMirror {
       /* ignore */
     }
     await this.restoreWirelessAwake();
+    // 正常停止已自行恢复设置，清掉手机端快照，避免看门狗/下次会话误恢复
+    await this.clearDeviceSettingsSnapshot();
     try {
       await this.adb?.close();
     } catch {
@@ -1837,13 +1987,17 @@ export class AdbMirror {
 
   /** 启动失败时释放 WebUSB / ADB / 解码器，避免页面自己把接口占住 */
   async _cleanupFailedStart() {
+    this._startEpoch += 1; // 启动失败清理同样作废在途启动
+    this.stopGuardHeartbeat();
     try {
       await this.client?.close();
     } catch {
       /* ignore */
     }
     this.client = null;
+    await this._runBeforeTeardown();
     await this.restoreWirelessAwake();
+    await this.clearDeviceSettingsSnapshot();
     try {
       await this.adb?.close();
     } catch {
@@ -1856,7 +2010,7 @@ export class AdbMirror {
     } catch {
       /* ignore */
     }
-    this.audio = new AudioMirror();
+    this.audio = new AudioMirror({ muted: this.muted });
     this._teardownRenderer();
   }
 
@@ -1928,6 +2082,8 @@ export class AdbMirror {
       this._wirelessTarget = target;
       this._wirelessServerUploaded = "";
       this._guardSession = "";
+      this.status("检测目标可达性…");
+      await this.probeWirelessTarget(target);
       this.status("无线上传中…");
       await this.pushServerWireless(target);
       const t1 = performance.now();

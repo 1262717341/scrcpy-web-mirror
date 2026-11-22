@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>scrcpy 便捷网页版 · 监视器 v4.2.11</title>
+    <title>scrcpy 便捷网页版 · 监视器 v4.3.1</title>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" type="image/x-icon" href="./assets/custom-icon.ico" />
-    <link rel="stylesheet" href="./css/app.css?v=4.2.12-ui8" />
+    <link rel="stylesheet" href="./css/app.css?v=4.3.1-ui1" />
   </head>
   <body>
     <div class="app" id="app">
@@ -41,9 +41,9 @@
 
         <!-- ===== 左侧工具轨 ===== -->
         <nav class="rail" id="rail" aria-label="控制台">
-          <div class="rail-brand" title="scrcpy 便捷网页版 v4.2.2">
+          <div class="rail-brand" title="scrcpy 便捷网页版 v4.3.1">
             <span class="rail-logo"><img src="./assets/logo.png" alt="scrcpy 便捷网页版" /></span>
-            <span class="rail-ver" id="rail-ver">4.2.12</span>
+            <span class="rail-ver" id="rail-ver">4.3.1</span>
           </div>
           <div class="rail-state" id="rail-state" data-state="offline">
             <span class="status-chip"><i class="status-dot" aria-hidden="true"></i><b id="status-short">未连接</b></span>
@@ -435,7 +435,7 @@
     </div>
 
     <div class="toast-root" id="toast-root"></div>
-    <script src="./js/mirror.bundle.js?v=4.2.12-ui8"></script>
+    <script src="./js/mirror.bundle.js?v=4.3.1-ui1"></script>
     <script>
       (() => {
         const app = document.getElementById("app");
@@ -500,6 +500,9 @@
         };
         focusButton.addEventListener("click", () => setFocus());
         document.getElementById("btn-focus-exit").addEventListener("click", () => setFocus(false));
+        // 暴露给统一快捷键处理器（src/page-mirror.js 的 handleShortcut）
+        window.__appUI = window.__appUI || {};
+        window.__appUI.setFocus = setFocus;
 
         // ===== 皮肤与侧栏位置 =====
         const root = document.documentElement;
@@ -595,6 +598,7 @@
           toggleDrawer(lastDrawer);
         };
         const toggleRailDrawer = () => setRailCollapsed(app.classList.contains("drawer-open"));
+        window.__appUI.toggleRailDrawer = toggleRailDrawer;
         railCollapseButton.addEventListener("click", toggleRailDrawer);
         document.getElementById("skin-reset").addEventListener("click", () => applyAppearance({ ...appearanceDefaults }));
         applyAppearance(appearance, false);
@@ -607,23 +611,7 @@
         new MutationObserver(syncStatus).observe(status, { attributes: true, childList: true, characterData: true, subtree: true, attributeFilter: ["class"] });
         syncStatus();
 
-        document.addEventListener("keydown", (event) => {
-          const tag = event.target?.tagName;
-          const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target?.isContentEditable;
-          if (event.key === "Escape" && !event.shiftKey && !typing) {
-            if (app.classList.contains("focus-mode")) setFocus(false);
-            return;
-          }
-          if (typing || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-          const key = event.key.toLowerCase();
-          if (key === "i" || key === "v") {
-            event.preventDefault();
-            setFocus();
-          } else if (key === "o") {
-            event.preventDefault();
-            toggleRailDrawer();
-          }
-        });
+        // 快捷键已统一由 src/page-mirror.js 的 handleShortcut 处理（含 key-sink 聚焦态）
 
         if ("ResizeObserver" in window) new ResizeObserver(refreshCanvas).observe(stage);
         if (!appearance.railCollapsed) toggleDrawer("connect");

@@ -272,62 +272,6 @@ export class DeviceController {
     await this.key(AndroidKeyEventAction.Up, keyCode, metaState);
   }
 
-  /** DOM KeyboardEvent.code → AndroidKeyCode */
-  /**
-   * Keyboard / CJK input:
-   * - printable (incl. Chinese) -> injectText
-   * - function keys -> injectKeyCode
-   */
-  async keyFromEvent(e, isDown) {
-    const key = e.key || "";
-    const code = e.code || "";
-
-    if (e.isComposing || key === "Process" || key === "Unidentified") {
-      return;
-    }
-
-    const isPrintable =
-      key.length === 1 ||
-      (key.length > 1 &&
-        !/^(Enter|Backspace|Tab|Escape|Delete|Arrow\w+|Home|End|Page\w+|F\d+|Control|Shift|Alt|Meta|CapsLock|ContextMenu|Dead)$/.test(key));
-
-    if (isPrintable) {
-      if (isDown) await this.injectText(key);
-      return;
-    }
-
-    let keyCode = AndroidKeyCode[code];
-    if (keyCode == null) {
-      const map = {
-        Enter: AndroidKeyCode.Enter,
-        Backspace: AndroidKeyCode.Backspace,
-        Tab: AndroidKeyCode.Tab,
-        Space: AndroidKeyCode.Space,
-        Escape: AndroidKeyCode.Escape,
-        Delete: AndroidKeyCode.Delete,
-      };
-      keyCode = map[code] ?? map[key];
-    }
-    if (keyCode == null) return;
-
-    let meta = 0;
-    if (e.altKey) meta |= 2 | 16;
-    if (e.shiftKey) meta |= 1 | 64;
-    if (e.ctrlKey) meta |= 4096 | 8192;
-    if (e.metaKey) meta |= 65536 | 131072;
-
-    await this.key(
-      isDown ? AndroidKeyEventAction.Down : AndroidKeyEventAction.Up,
-      keyCode,
-      meta
-    );
-  }
-
-  async injectComposition(text) {
-    if (!text) return;
-    await this.injectText(text);
-  }
-
   async injectText(text) {
     const c = this.controller;
     const s = text == null ? "" : String(text);
@@ -337,17 +281,6 @@ export class DeviceController {
     } catch (e) {
       await this.setClipboardAndPaste(s);
     }
-  }
-
-  /** 缓冲短按键，批量注入文本（中文/粘贴） */
-  queueText(chunk) {
-    this._textBuf += chunk;
-    if (this._textTimer) clearTimeout(this._textTimer);
-    this._textTimer = setTimeout(async () => {
-      const t = this._textBuf;
-      this._textBuf = "";
-      if (t) await this.injectText(t).catch(() => {});
-    }, 30);
   }
 
   async back() {
@@ -576,9 +509,4 @@ export class DeviceController {
     await this.releaseAllPointers();
     if (this._textTimer) clearTimeout(this._textTimer);
   }
-}
-
-/** 浏览器键 → 展示用标签 */
-export function keyLabel(e) {
-  return e.key;
 }

@@ -5322,6 +5322,28 @@
     array.length -= 1;
   }
 
+  // node_modules/@yume-chan/adb/esm/server/transport.js
+  var ADB_SERVER_DEFAULT_FEATURES = /* @__PURE__ */ (() => [
+    AdbFeature.ShellV2,
+    AdbFeature.Cmd,
+    AdbFeature.StatV2,
+    AdbFeature.ListV2,
+    AdbFeature.FixedPushMkdir,
+    "apex",
+    AdbFeature.Abb,
+    // only tells the client the symlink timestamp issue in `adb push --sync` has been fixed.
+    // No special handling required.
+    "fixed_push_symlink_timestamp",
+    AdbFeature.AbbExec,
+    "remount_shell",
+    "track_app",
+    AdbFeature.SendReceiveV2,
+    "sendrecv_v2_brotli",
+    "sendrecv_v2_lz4",
+    "sendrecv_v2_zstd",
+    "sendrecv_v2_dry_run_send"
+  ])();
+
   // node_modules/@yume-chan/adb-daemon-webusb/esm/error.js
   var DeviceBusyError = class extends Error {
     constructor(cause) {
@@ -11748,51 +11770,6 @@
       await this.key(AndroidKeyEventAction.Down, keyCode, metaState);
       await this.key(AndroidKeyEventAction.Up, keyCode, metaState);
     }
-    /** DOM KeyboardEvent.code → AndroidKeyCode */
-    /**
-     * Keyboard / CJK input:
-     * - printable (incl. Chinese) -> injectText
-     * - function keys -> injectKeyCode
-     */
-    async keyFromEvent(e, isDown) {
-      const key = e.key || "";
-      const code = e.code || "";
-      if (e.isComposing || key === "Process" || key === "Unidentified") {
-        return;
-      }
-      const isPrintable = key.length === 1 || key.length > 1 && !/^(Enter|Backspace|Tab|Escape|Delete|Arrow\w+|Home|End|Page\w+|F\d+|Control|Shift|Alt|Meta|CapsLock|ContextMenu|Dead)$/.test(key);
-      if (isPrintable) {
-        if (isDown) await this.injectText(key);
-        return;
-      }
-      let keyCode = AndroidKeyCode[code];
-      if (keyCode == null) {
-        const map = {
-          Enter: AndroidKeyCode.Enter,
-          Backspace: AndroidKeyCode.Backspace,
-          Tab: AndroidKeyCode.Tab,
-          Space: AndroidKeyCode.Space,
-          Escape: AndroidKeyCode.Escape,
-          Delete: AndroidKeyCode.Delete
-        };
-        keyCode = map[code] ?? map[key];
-      }
-      if (keyCode == null) return;
-      let meta = 0;
-      if (e.altKey) meta |= 2 | 16;
-      if (e.shiftKey) meta |= 1 | 64;
-      if (e.ctrlKey) meta |= 4096 | 8192;
-      if (e.metaKey) meta |= 65536 | 131072;
-      await this.key(
-        isDown ? AndroidKeyEventAction.Down : AndroidKeyEventAction.Up,
-        keyCode,
-        meta
-      );
-    }
-    async injectComposition(text) {
-      if (!text) return;
-      await this.injectText(text);
-    }
     async injectText(text) {
       const c = this.controller;
       const s = text == null ? "" : String(text);
@@ -11802,17 +11779,6 @@
       } catch (e) {
         await this.setClipboardAndPaste(s);
       }
-    }
-    /** 缓冲短按键，批量注入文本（中文/粘贴） */
-    queueText(chunk) {
-      this._textBuf += chunk;
-      if (this._textTimer) clearTimeout(this._textTimer);
-      this._textTimer = setTimeout(async () => {
-        const t = this._textBuf;
-        this._textBuf = "";
-        if (t) await this.injectText(t).catch(() => {
-        });
-      }, 30);
     }
     async back() {
       await this.tapKey(AndroidKeyCode.AndroidBack);
@@ -12128,12 +12094,12 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
 
   // src/audio.js
   var AudioMirror = class {
-    constructor() {
+    constructor(options = {}) {
       this.ctx = null;
       this.gain = null;
       this.decoder = null;
       this.playing = false;
-      this.muted = false;
+      this.muted = !!options.muted;
       this._nextTime = 0;
       this._codec = "";
       this._rate = 48e3;
@@ -12152,6 +12118,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this._underruns = 0;
       this._trimmedTotal = 0;
       this._lastTrimLog = 0;
+      this._gotConfig = false;
     }
     get stats() {
       return {
@@ -12403,7 +12370,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           if (!value?.data) continue;
           this._packets += 1;
           if (this.muted) continue;
-          const bytes = value.data;
+          const bytes = this._stripPacketHeader(value.data);
           const samples = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1);
           const frames = samples.length >> 1;
           if (frames < 1) continue;
@@ -12559,6 +12526,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       }
       this.ctx = null;
       this.gain = null;
+      this._gotConfig = false;
     }
   };
 
@@ -12885,7 +12853,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         closed2 = true;
       };
       try {
-        await writer.write(new TextEncoder().encode(`host:transport-id:${transportId}`));
+        const command = `host:transport-id:${transportId}`;
+        await writer.write(
+          new TextEncoder().encode(command.length.toString(16).padStart(4, "0") + command)
+        );
         const { value } = await reader.read();
         const text = value ? new TextDecoder().decode(value) : "";
         if (text.slice(0, 4) !== "OKAY") {
@@ -12925,11 +12896,17 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       model,
       device,
       transportId,
+      // Adb 构造器会读取这些字段；缺失时 canUseFeature() 抛 "reading 'includes'"
+      maxPayloadSize: 1 * 1024 * 1024,
+      clientFeatures: ADB_SERVER_DEFAULT_FEATURES,
+      disconnected: new Promise(() => {
+      }),
       banner: {
         product,
         model,
         device,
-        features: /* @__PURE__ */ new Set(["shell_v2", "cmd", "stat_v2"])
+        // Adb.canUseFeature() 使用 includes()，必须是数组
+        features: ["shell_v2", "cmd", "stat_v2"]
       },
       connect: openTransport,
       async addReverseTunnel() {
@@ -13099,6 +13076,24 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     });
     authTask.catch(() => {
     });
+    let detachBridgeAbort = () => {
+    };
+    const bridgeAborted = new Promise((_, reject) => {
+      const abort = (ev) => reject(
+        new WirelessError(
+          "\u65E0\u7EBF\u901A\u9053\u5728\u63E1\u624B\u671F\u95F4\u5173\u95ED" + (ev && ev.code ? "\uFF08code " + ev.code + "\uFF09" : ""),
+          "BRIDGE_CLOSED_DURING_AUTH"
+        )
+      );
+      ws.addEventListener("close", abort);
+      ws.addEventListener("error", abort);
+      detachBridgeAbort = () => {
+        ws.removeEventListener("close", abort);
+        ws.removeEventListener("error", abort);
+      };
+    });
+    bridgeAborted.catch(() => {
+    });
     const authTimeout = Math.max(
       8e3,
       Number(new URLSearchParams(location.search).get("auth_timeout")) || 3e4
@@ -13115,7 +13110,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
               )
             );
           }, authTimeout);
-        })
+        }),
+        bridgeAborted
       ]);
     } catch (err) {
       try {
@@ -13127,6 +13123,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         "AUTH_FAIL",
         err
       );
+    } finally {
+      detachBridgeAbort();
     }
     const adb = new Adb(transport);
     onStatus("\u65E0\u7EBF\u5DF2\u8FDE\u63A5");
@@ -13253,6 +13251,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   var GUARD_LOG = "/data/local/tmp/panda_guard.log";
   var GUARD_HB = "/data/local/tmp/panda_hb";
   var GUARD_RUN = "/data/local/tmp/panda_run";
+  var SETTINGS_SNAPSHOT = "/data/local/tmp/panda_settings";
+  var ADB_KEYBOARD_ID = "com.android.adbkeyboard/.AdbIME";
   var GUARD_STALE = 30;
   var GUARD_IDLE_EXIT = 60;
   var AUDIO_ROUTE_CMD = `v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); case "$v" in ""|*[!0-9]*) v="";; esac; if [ -n "$v" ]; then media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; media volume --stream 3 --set $v >/dev/null 2>&1; fi; true`;
@@ -13348,6 +13348,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this._opts = {};
       this.adb = null;
       this.client = null;
+      this._startEpoch = 0;
       this.decoder = null;
       this.device = null;
       this.canvas = null;
@@ -13371,6 +13372,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this._cleaned = false;
       this._lateTimer = null;
       this._lateActive = false;
+      this._guardHeartbeatTimer = null;
       this.muted = false;
       this._awakeSaved = null;
       this._awakeApplied = false;
@@ -13798,6 +13800,55 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         return false;
       }
     }
+    /**
+     * 把投屏前的系统设置快照写入手机端文件，供看门狗在失联时自恢复。
+     * 关键点：此刻 ADB 通道还活着，且必须在 applyWirelessAwake / 输入法切换之前调用，
+     * 读到的是用户投屏前的真实值。拔线/断网后 PC 端再无通道，只有手机端能执行恢复。
+     * 文件内容是可被 sh `.` 直接 source 的 KEY=VALUE，值来自系统命令，均为安全字符。
+     */
+    async snapshotDeviceSettings() {
+      if (!this.adb) return false;
+      try {
+        const out = String(
+          await this.deviceShell(
+            'ime=$(settings get secure default_input_method 2>/dev/null); case "$ime" in ""|null) ime=$(ime list -s 2>/dev/null | grep -v "' + ADB_KEYBOARD_ID + '" | head -n 1);; esac; timeout=$(settings get system screen_off_timeout 2>/dev/null); case "$timeout" in ""|*[!0-9]*) timeout="";; esac; echo "IME=$ime"; echo "TIMEOUT=$timeout"',
+            8e3
+          ) || ""
+        );
+        const ime = (/IME=(.*)/.exec(out) || [])[1]?.trim() || "";
+        const timeout = (/TIMEOUT=(\d+)/.exec(out) || [])[1] || "";
+        if (!ime && !timeout) {
+          this.onLog("\u8BBE\u7F6E\u5FEB\u7167\u8BFB\u53D6\u4E3A\u7A7A\uFF0C\u770B\u95E8\u72D7\u5C06\u65E0\u6CD5\u81EA\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4");
+          return false;
+        }
+        const safeIme = ime.replace(/[^A-Za-z0-9._\/:]/g, "");
+        const safeTimeout = /^\d+$/.test(timeout) ? timeout : "";
+        const body = "IME=" + safeIme + "\nTIMEOUT=" + safeTimeout + "\n";
+        let bin = "";
+        const bytes = new TextEncoder().encode(body);
+        for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+        const b64 = btoa(bin);
+        await this.deviceShell(
+          "echo '" + b64 + "' | base64 -d > " + SETTINGS_SNAPSHOT + " 2>/dev/null; true",
+          6e3
+        );
+        this.onLog(
+          "\u5DF2\u4FDD\u5B58\u8BBE\u7F6E\u5FEB\u7167\u5230\u624B\u673A\uFF08\u8F93\u5165\u6CD5 " + (safeIme || "\u672A\u77E5") + " / \u606F\u5C4F " + (safeTimeout ? Math.round(Number(safeTimeout) / 1e3) + "\u79D2" : "\u672A\u77E5") + "\uFF09"
+        );
+        return true;
+      } catch (e) {
+        this.onLog("\u8BBE\u7F6E\u5FEB\u7167\u4FDD\u5B58\u5931\u8D25 " + (e?.message || e));
+        return false;
+      }
+    }
+    /** 正常停止成功后清除手机端快照，避免看门狗后续误恢复 */
+    async clearDeviceSettingsSnapshot() {
+      if (!this.adb) return;
+      try {
+        await this.deviceShell("rm -f " + SETTINGS_SNAPSHOT + " 2>/dev/null; true", 5e3);
+      } catch {
+      }
+    }
     async restoreWirelessAwake() {
       const saved = this._awakeSaved ?? this._readAwakeStored();
       if (!this._awakeApplied && saved == null) return true;
@@ -13920,6 +13971,19 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         '    pkill -9 -f "[a]pp_process.*scrcpy" 2>/dev/null',
         // 只做净音量不变的「路由刷新」：不动勿扰、不按键、不改用户音量
         "    " + AUDIO_ROUTE_CMD,
+        // 恢复投屏前改过的系统设置：输入法 + 息屏时间。
+        // 这是失联后 PC 端通道已死时唯一的恢复途径（拔线/断网都覆盖）。
+        // 快照文件在投屏启动时写入，恢复成功即删除，保证幂等、不误伤新会话。
+        '    if [ -f "' + SETTINGS_SNAPSHOT + '" ]; then',
+        '      . "' + SETTINGS_SNAPSHOT + '" 2>/dev/null',
+        '      if [ -n "$IME" ]; then ime set "$IME" >/dev/null 2>&1; fi',
+        '      case "$TIMEOUT" in',
+        '        ""|*[!0-9]*) ;;',
+        '        *) settings put system screen_off_timeout "$TIMEOUT" >/dev/null 2>&1 ;;',
+        "      esac",
+        '      rm -f "' + SETTINGS_SNAPSHOT + '" 2>/dev/null',
+        '      log "restored settings ime=$IME timeout=$TIMEOUT"',
+        "    fi",
         '    remain=$(ps -A 2>/dev/null | grep -c "[c]om.genymobile.scrcpy")',
         '    log "released remain=$remain"',
         "    exit 0",
@@ -13957,6 +14021,20 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         return true;
       } catch {
         return false;
+      }
+    }
+    /** USB 场景启停内部心跳（无线场景由 page-mirror 的 Worker 负责，避免重复写） */
+    startGuardHeartbeat() {
+      this.stopGuardHeartbeat();
+      if (this._wirelessTarget) return;
+      this._guardHeartbeatTimer = setInterval(() => {
+        if (this.running) void this.heartbeat();
+      }, 5e3);
+    }
+    stopGuardHeartbeat() {
+      if (this._guardHeartbeatTimer) {
+        clearInterval(this._guardHeartbeatTimer);
+        this._guardHeartbeatTimer = null;
       }
     }
     async stopAudioGuard() {
@@ -14131,9 +14209,11 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
             this.onLog("\u770B\u95E8\u72D7\u672A\u7559\u4E0B\u65E5\u5FD7\uFF1A\u672C\u8F6E\u53EF\u80FD\u672A\u542F\u52A8\u6210\u529F\uFF08\u82E5\u65E5\u5FD7\u5E38\u51FA\u73B0\u6B64\u884C\u8BF7\u53CD\u9988\uFF09");
           }
           const ok = await this.releaseSessionOnDevice();
+          await this._runBeforeTeardown();
+          await this.restoreWirelessAwake();
           this._lateActive = false;
           this.onLog(
-            ok ? "\u624B\u673A\u5DF2\u91CD\u65B0\u4E0A\u7EBF\uFF0C\u5DF2\u7ED3\u675F\u6B8B\u7559 scrcpy \u5E76\u5237\u65B0\u97F3\u9891\u8DEF\u7531\uFF0C\u58F0\u97F3\u5E94\u5DF2\u6062\u590D" : "\u624B\u673A\u5DF2\u4E0A\u7EBF\u4F46\u672A\u80FD\u7ED3\u675F scrcpy\uFF0C\u8BF7\u70B9\u9876\u680F\u300C\u6062\u590D\u58F0\u97F3\u300D"
+            ok ? "\u624B\u673A\u5DF2\u91CD\u65B0\u4E0A\u7EBF\uFF0C\u5DF2\u7ED3\u675F\u6B8B\u7559 scrcpy\u3001\u5237\u65B0\u97F3\u9891\u8DEF\u7531\u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4" : "\u624B\u673A\u5DF2\u4E0A\u7EBF\u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4\uFF0C\u4F46\u672A\u80FD\u7ED3\u675F scrcpy\uFF0C\u8BF7\u70B9\u9876\u680F\u300C\u6062\u590D\u58F0\u97F3\u300D"
           );
           return;
         } catch {
@@ -14150,17 +14230,20 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     }
     /** 非用户主动停止的断线：停止播放 + 释放手机端音频占用 + 清掉舞台画面 */
     async cleanupAfterDrop(reason) {
+      this._startEpoch += 1;
       if (this._dropHandled || this._cleaned) return;
       this._dropHandled = true;
       this._cleaned = true;
       this.running = false;
+      this.stopGuardHeartbeat();
       this.onLog("\u8FDE\u63A5\u4E2D\u65AD\u539F\u56E0\uFF1A" + reason);
       this._teardownRenderer();
       try {
         await this.audio?.stop();
       } catch {
       }
-      this.audio = new AudioMirror();
+      this.audio = new AudioMirror({ muted: this.muted });
+      await this._runBeforeTeardown();
       await this.restoreWirelessAwake();
       await this.releaseScrcpyOnDevice();
       if (this._wirelessTarget) {
@@ -14171,12 +14254,11 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           this.onLog("\u624B\u673A\u58F0\u97F3\u5DF2\u6062\u590D");
         } else {
           this.onLog(
-            "\u624B\u673A\u5DF2\u79BB\u7F51\uFF0C\u65E0\u6CD5\u8FDC\u7A0B\u6E05\u7406\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u4F1A\u5728\u540E\u53F0\u7ED3\u675F scrcpy\uFF1B\u91CD\u65B0\u8054\u7F51\u540E\u82E5\u4ECD\u65E0\u58F0\uFF0C\u6309\u4E00\u6B21\u97F3\u91CF\u952E\u5373\u53EF"
+            "\u624B\u673A\u5DF2\u79BB\u7F51\uFF0C\u65E0\u6CD5\u8FDC\u7A0B\u6E05\u7406\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u4F1A\u5728\u540E\u53F0\u7ED3\u675F scrcpy \u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4\uFF1B\u91CD\u65B0\u8054\u7F51\u540E\u82E5\u4ECD\u65E0\u58F0\uFF0C\u6309\u4E00\u6B21\u97F3\u91CF\u952E\u5373\u53EF"
           );
           this._scheduleLateCleanup();
         }
       }
-      await this._runBeforeTeardown();
       try {
         await this.adb?.close();
       } catch {
@@ -14185,6 +14267,29 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       await this._closeUsbHandle();
       this.deviceController = null;
       this.status("\u5DF2\u65AD\u5F00");
+    }
+    /**
+     * 无线连接前置 TCP 快探：服务端 2s 超时判定目标端口可达性，
+     * 避免不可达目标走 12s adb connect + 30s ADB 握手的慢失败路径（约 31s）。
+     * 旧版 serve.py 未实现该端点（404）时静默跳过，保持向后兼容。
+     */
+    async probeWirelessTarget(target) {
+      try {
+        const resp = await fetch("/api/tcp-probe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target })
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.ok) return;
+        throw new MirrorError(
+          "\u76EE\u6807\u4E0D\u53EF\u8FBE\uFF1A" + (data.error || "\u8BF7\u786E\u8BA4\u624B\u673A\u5DF2\u5F00\u542F\u65E0\u7EBF\u8C03\u8BD5\u4E14 IP \u6B63\u786E"),
+          "TARGET_UNREACHABLE"
+        );
+      } catch (err) {
+        if (err instanceof MirrorError && err.code === "TARGET_UNREACHABLE") throw err;
+      }
     }
     async pushServerWireless(target) {
       this.onLog("\u901A\u8FC7\u672C\u5730\u5B98\u65B9 ADB \u4E0A\u4F20 scrcpy-server\u2026");
@@ -14314,6 +14419,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     }
     async startStream() {
       if (!this.adb) throw new MirrorError("ADB \u672A\u8FDE\u63A5", "NO_ADB");
+      const epoch = ++this._startEpoch;
       this._stopRequested = false;
       this._dropHandled = false;
       this._cleaned = false;
@@ -14354,10 +14460,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           "Android API " + sdk + " \u4E0D\u652F\u6301\u300C\u624B\u673A\u540C\u65F6\u5916\u653E\u300D(\u9700 Android 13+)\uFF1B\u5DF2\u6539\u4E3A\u4E0D\u8F6C\u53D1\u97F3\u9891\uFF0C\u624B\u673A\u58F0\u97F3\u4FDD\u6301\u6B63\u5E38"
         );
       }
-      const guardTask = this._wirelessTarget ? this.deployAudioGuard().catch((e) => {
+      const guardTask = this.deployAudioGuard().catch((e) => {
         this.onLog("\u770B\u95E8\u72D7\u5E03\u9632\u5F02\u5E38\uFF08\u4E0D\u5F71\u54CD\u6295\u5C4F\uFF09\uFF1A" + (e?.message || e));
         return false;
-      }) : Promise.resolve(false);
+      });
       await this.pushServer();
       this._mountRenderer();
       this.status("\u542F\u52A8\u6295\u5C4F\u2026");
@@ -14424,12 +14530,27 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       }
       this.client = await AdbScrcpyClient.start(this.adb, DefaultServerPath, options);
       if (!this.client) throw new MirrorError("scrcpy \u5BA2\u6237\u7AEF\u542F\u52A8\u5931\u8D25", "SCRCPY_FAIL");
+      const client = this.client;
       if (this._wirelessTarget) {
         const guardReady = await guardTask;
+        if (epoch !== this._startEpoch) {
+          try {
+            await client.close();
+          } catch {
+          }
+          throw new MirrorError("\u542F\u52A8\u5DF2\u88AB\u65B0\u8BF7\u6C42\u53D6\u6D88", "STALE_START");
+        }
         this.onLog(guardReady ? "\u770B\u95E8\u72D7\u5E03\u9632\u5B8C\u6210\uFF08\u4E0E\u542F\u52A8\u5E76\u884C\uFF0C\u4E0D\u5360\u8FDE\u63A5\u65F6\u95F4\uFF09" : "\u770B\u95E8\u72D7\u672A\u5E03\u9632\uFF0C\u65AD\u7F51\u65F6\u53EA\u80FD\u9760\u91CD\u8FDE\u540E\u6E05\u7406");
       }
-      const logSink = (msg) => this.onLog(translateServerLine(String(msg)));
-      this.client.output.pipeTo(
+      if (epoch !== this._startEpoch) {
+        try {
+          await client.close();
+        } catch {
+        }
+        throw new MirrorError("\u542F\u52A8\u5DF2\u88AB\u65B0\u8BF7\u6C42\u53D6\u6D88", "STALE_START");
+      }
+      const logSink = (msg) => this.onLog(String(msg));
+      client.output.pipeTo(
         new WritableStream({
           write(chunk) {
             console.debug("[scrcpy]", chunk);
@@ -14438,15 +14559,18 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         })
       ).catch(() => {
       });
-      const videoStream = await this.client.videoStream;
+      const videoStream = await client.videoStream;
       if (!videoStream) throw new MirrorError("scrcpy \u672A\u8FD4\u56DE\u89C6\u9891\u6D41", "NO_VIDEO");
+      await this.snapshotDeviceSettings();
       await this.applyWirelessAwake();
+      this.startGuardHeartbeat();
       const { metadata, stream: packetStream } = videoStream;
+      this._videoStream = packetStream;
       this._size = {
         width: metadata?.width || 0,
         height: metadata?.height || 0
       };
-      this.deviceController = new DeviceController(this.client, {
+      this.deviceController = new DeviceController(client, {
         width: () => this._size.width,
         height: () => this._size.height
       }, this.adb);
@@ -14463,9 +14587,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         this.onStats({ ...this._stats(), audio: "\u672A\u8F6C\u53D1\uFF08\u624B\u673A\u539F\u6837\u51FA\u58F0\uFF09" });
       }
       try {
-        if (audioOn && this.client.audioStream) {
+        if (audioOn && client.audioStream) {
           this.audio.onLog = (m) => this.onLog(String(m));
-          const audioMeta = await this.client.audioStream;
+          const audioMeta = await client.audioStream;
+          this._audioStream = audioMeta?.stream || null;
           const audioResult = await this.audio.start(audioMeta);
           const modeZh = (m) => {
             const s = String(m || "");
@@ -14572,7 +14697,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           }
         }
       }, 500);
-      this.client.exited.then(() => {
+      client.exited.then(() => {
         const upSec = this.startTs ? Math.round((performance.now() - this.startTs) / 1e3) : 0;
         const lastAge = this._diagLastPacketAt ? Math.round((Date.now() - this._diagLastPacketAt) / 1e3) : -1;
         this.onLog(
@@ -14585,7 +14710,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           });
         }
       }).catch((e) => {
-        const output = Array.isArray(e?.output) ? e.output.slice(-8).map((l) => translateServerLine(String(l))).join(" | ") : "";
+        const output = Array.isArray(e?.output) ? e.output.slice(-8).map((l) => String(l)).join(" | ") : "";
         const reason = "\u63A7\u5236\u901A\u9053\u5F02\u5E38\uFF1A" + String(e?.name || "\u9519\u8BEF") + ": " + String(e?.message || e) + (output ? "\uFF1B\u670D\u52A1\u7AEF\u8F93\u51FA " + output : "");
         this.onLog(reason);
         if (!this._stopRequested) this.cleanupAfterDrop(reason).catch(() => {
@@ -14603,8 +14728,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           });
         });
       };
-      watchChannel(this.videoStream, "\u89C6\u9891\u901A\u9053");
-      watchChannel(this.audioStream, "\u97F3\u9891\u901A\u9053");
+      watchChannel(this._videoStream, "\u89C6\u9891\u901A\u9053");
+      watchChannel(this._audioStream, "\u97F3\u9891\u901A\u9053");
     }
     _stats() {
       const elapsed = (performance.now() - this.startTs) / 1e3;
@@ -14632,10 +14757,12 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return null;
     }
     async stop() {
+      this._startEpoch += 1;
       this._stopRequested = true;
       this._dropHandled = true;
       this._cleaned = true;
       this.running = false;
+      this.stopGuardHeartbeat();
       if (this._statsTimer) {
         clearInterval(this._statsTimer);
         this._statsTimer = null;
@@ -14656,7 +14783,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         await this.audio?.stop();
       } catch {
       }
-      this.audio = new AudioMirror();
+      this.audio = new AudioMirror({ muted: this.muted });
       try {
         await Promise.race([
           this.client?.close(),
@@ -14676,6 +14803,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       } catch {
       }
       await this.restoreWirelessAwake();
+      await this.clearDeviceSettingsSnapshot();
       try {
         await this.adb?.close();
       } catch {
@@ -14692,12 +14820,16 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     }
     /** 启动失败时释放 WebUSB / ADB / 解码器，避免页面自己把接口占住 */
     async _cleanupFailedStart() {
+      this._startEpoch += 1;
+      this.stopGuardHeartbeat();
       try {
         await this.client?.close();
       } catch {
       }
       this.client = null;
+      await this._runBeforeTeardown();
       await this.restoreWirelessAwake();
+      await this.clearDeviceSettingsSnapshot();
       try {
         await this.adb?.close();
       } catch {
@@ -14708,7 +14840,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         await this.audio?.stop();
       } catch {
       }
-      this.audio = new AudioMirror();
+      this.audio = new AudioMirror({ muted: this.muted });
       this._teardownRenderer();
     }
     /** 一键 USB：选设备 → ADB 认证 → 投屏+控制+声音 */
@@ -14775,6 +14907,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         this._wirelessTarget = target;
         this._wirelessServerUploaded = "";
         this._guardSession = "";
+        this.status("\u68C0\u6D4B\u76EE\u6807\u53EF\u8FBE\u6027\u2026");
+        await this.probeWirelessTarget(target);
         this.status("\u65E0\u7EBF\u4E0A\u4F20\u4E2D\u2026");
         await this.pushServerWireless(target);
         const t1 = performance.now();
@@ -14819,9 +14953,28 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     let path = String(input == null ? "" : input).trim();
     if (!path) path = base;
     if (!path.startsWith("/")) path = (base.replace(/\/+$/, "") || "") + "/" + path;
-    path = path.replace(/\/{2,}/g, "/");
-    if (path.length > 1) path = path.replace(/\/+$/, "");
-    return path || "/";
+    const parts = [];
+    for (const seg of path.split("/")) {
+      if (!seg || seg === ".") continue;
+      if (seg === "..") {
+        parts.pop();
+        continue;
+      }
+      parts.push(seg);
+    }
+    return "/" + parts.join("/");
+  }
+  function resolveSafePath(input, root = DEFAULT_DIR) {
+    const base = normalizePath(root);
+    let target = normalizePath(input, base);
+    const alias = "/storage/emulated/0";
+    if (target === alias) target = base;
+    else if (target.startsWith(alias + "/")) target = base + target.slice(alias.length);
+    const prefix = base === "/" ? "/" : base + "/";
+    if (target !== base && !target.startsWith(prefix)) {
+      throw new Error("\u8DEF\u5F84\u8D85\u51FA\u5141\u8BB8\u8303\u56F4\uFF08\u4EC5\u9650 " + base + "\uFF09");
+    }
+    return target;
   }
   function joinPath(dir, name) {
     const base = normalizePath(dir);
@@ -15052,7 +15205,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       }
     }
     async list(path) {
-      const dir = normalizePath(path);
+      const dir = resolveSafePath(path);
       const entries = await this._withSync((sync) => sync.readdir(dir));
       const mapped = entries.filter((entry) => entry.name !== "." && entry.name !== "..").map((entry) => ({
         name: entry.name,
@@ -15070,10 +15223,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return { path: dir, entries: mapped };
     }
     async stat(path) {
-      return await this._withSync((sync) => sync.lstat(normalizePath(path)));
+      return await this._withSync((sync) => sync.lstat(resolveSafePath(path)));
     }
     async readBlob(path, onProgress) {
-      const target = normalizePath(path);
+      const target = resolveSafePath(path);
       const chunks = [];
       let received = 0;
       await this._withSync(async (sync) => {
@@ -15099,7 +15252,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return new Blob(chunks, { type: "application/octet-stream" });
     }
     async writeBlob(path, blob, onProgress, options = {}) {
-      const target = normalizePath(path);
+      const target = resolveSafePath(path);
       let sent = 0;
       const file = blob.stream().pipeThrough(
         new TransformStream({
@@ -15114,19 +15267,22 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return target;
     }
     async mkdir(path) {
-      const out = await this.shell.run(["mkdir", "-p", shellQuote(normalizePath(path))]);
+      const out = await this.shell.run(["mkdir", "-p", shellQuote(resolveSafePath(path))]);
       return out.trim();
     }
     async remove(path, recursive = true) {
-      const target = normalizePath(path);
-      if (target === "/" || target === "/sdcard" || target === "/storage/emulated/0") {
+      const target = resolveSafePath(path);
+      if (target === DEFAULT_DIR || target === "/storage/emulated/0") {
         throw new Error("\u4E0D\u5141\u8BB8\u5220\u9664\u8BE5\u76EE\u5F55");
       }
       return await this.shell.run(["rm", "-" + (recursive ? "rf" : "f"), shellQuote(target)], 3e4);
     }
     async rename(from, to) {
-      const src = normalizePath(from);
-      const dst = normalizePath(to);
+      const src = resolveSafePath(from);
+      const dst = resolveSafePath(to);
+      if (src === DEFAULT_DIR || dst === DEFAULT_DIR) {
+        throw new Error("\u4E0D\u5141\u8BB8\u91CD\u547D\u540D\u5185\u90E8\u5B58\u50A8\u6839\u76EE\u5F55");
+      }
       const out = await this.shell.run(["mv", shellQuote(src), shellQuote(dst)], 3e4);
       return out.trim();
     }
@@ -15135,9 +15291,9 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
      * 目标由调用方负责生成不冲突的名字；这里只拦“把目录复制进自身子目录”这类必然递归的错误。
      */
     async copy(from, to) {
-      const src = normalizePath(from);
-      const dst = normalizePath(to);
-      if (src === "/" || src === "/sdcard" || src === "/storage/emulated/0") {
+      const src = resolveSafePath(from);
+      const dst = resolveSafePath(to);
+      if (src === DEFAULT_DIR || src === "/storage/emulated/0") {
         throw new Error("\u4E0D\u5141\u8BB8\u590D\u5236\u8BE5\u76EE\u5F55");
       }
       if (src === dst) throw new Error("\u6E90\u548C\u76EE\u6807\u76F8\u540C");
@@ -15148,7 +15304,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return out.trim();
     }
     async mediaScan(path) {
-      const target = normalizePath(path);
+      const target = resolveSafePath(path);
       try {
         await this.shell.run([
           "am",
@@ -15612,12 +15768,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         toast2("\u8BFB\u53D6\u8BE6\u60C5\u5931\u8D25", String(e?.message || e));
       }
     }
-    async function installApk(file) {
-      if (!file) return;
-      if (appsBusy) return toast2("\u8FD8\u6709\u64CD\u4F5C\u6B63\u5728\u8FDB\u884C", "\u8BF7\u7A0D\u540E\u518D\u8BD5");
-      appsBusy = true;
-      const btn = $2("btn-app-install");
-      if (btn) btn.disabled = true;
+    async function doInstallApk(file) {
+      if (!file) return false;
       setAppsStatus("\u6B63\u5728\u63A8\u9001\u5230\u624B\u673A\u2026");
       let installed = false;
       try {
@@ -15638,11 +15790,22 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         setAppsStatus("\u5B89\u88C5\u5931\u8D25\uFF1A" + String(e?.message || e));
         toast2("\u5B89\u88C5\u5931\u8D25", String(e?.message || e));
         log("error", "\u5B89\u88C5\u5931\u8D25 " + String(e?.message || e));
+      }
+      if (installed) await refreshApps();
+      return installed;
+    }
+    async function installApk(file) {
+      if (!file) return false;
+      if (appsBusy) return toast2("\u8FD8\u6709\u64CD\u4F5C\u6B63\u5728\u8FDB\u884C", "\u8BF7\u7A0D\u540E\u518D\u8BD5"), false;
+      appsBusy = true;
+      const btn = $2("btn-app-install");
+      if (btn) btn.disabled = true;
+      try {
+        return await doInstallApk(file);
       } finally {
         appsBusy = false;
         if (btn) btn.disabled = false;
       }
-      if (installed) await refreshApps();
     }
     function renderFiles() {
       const list2 = filesList();
@@ -16026,7 +16189,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         for (const file of items) {
           if (/\.apk$/i.test(file.name)) {
             setFilesStatus("\u68C0\u6D4B\u5230 APK\uFF0C\u8F6C\u53BB\u5B89\u88C5\uFF1A" + file.name);
-            await installApk(file);
+            const ok = await doInstallApk(file);
+            if (!ok) throw new Error("APK \u5B89\u88C5\u5931\u8D25\uFF1A" + file.name);
             continue;
           }
           const target = joinPath(filesPath, file.name);
@@ -16283,6 +16447,12 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         apps = null;
         appsAdb = null;
         appsCache = [];
+        appQueue.length = 0;
+        appActive = 0;
+        if (appScrollBody) {
+          appScrollBody.removeEventListener("scroll", loadVisibleAppRows);
+          appScrollBody = null;
+        }
         files = null;
         filesAdb = null;
         filesEntries = [];
@@ -16351,6 +16521,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this.shell = new AdbShell(adb);
       this.previousIme = "";
       this.active = false;
+      this._restoring = null;
     }
     get ready() {
       return this.shell.ready;
@@ -16389,6 +16560,13 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       if (current === ADB_IME_ID) {
         this.active = true;
         if (!this.previousIme) this.previousIme = readPrevIme(this.serial);
+        if (!this.previousIme || this.previousIme === ADB_IME_ID) {
+          const fallback = await this.pickFallbackIme();
+          if (fallback) {
+            this.previousIme = fallback;
+            storePrevIme(this.serial, fallback);
+          }
+        }
         return;
       }
       if (current) {
@@ -16407,8 +16585,16 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       const ids = String(listed || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       return ids.find((id) => id !== ADB_IME_ID) || "";
     }
-    /** 恢复手机原来的输入法 */
-    async restore() {
+    /** 恢复手机原来的输入法（幂等：并发调用共享同一次恢复） */
+    restore() {
+      if (!this._restoring) {
+        this._restoring = this._doRestore().finally(() => {
+          this._restoring = null;
+        });
+      }
+      return this._restoring;
+    }
+    async _doRestore() {
       if (!this.ready) {
         this.active = false;
         return "";
@@ -16455,14 +16641,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       );
       if (/Error/i.test(out)) throw new Error(out.trim());
       return out.trim();
-    }
-    /** 清空当前输入框内容（可选，用于「替换」场景） */
-    async clearViaKeyevents(count) {
-      const n = Math.max(0, Math.min(200, Number(count) || 0));
-      if (!n) return;
-      const seq = [];
-      for (let i = 0; i < n; i += 1) seq.push("input keyevent 67");
-      await this.shell.sh(seq.join("; "), 3e4);
     }
   };
 
@@ -16717,6 +16895,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   var usbGuardWorker = null;
   var usbGuardFallback = null;
   var usbGuardBusy = false;
+  var usbDirectMode = false;
   function stopUsbGuard() {
     if (usbGuardFallback) clearInterval(usbGuardFallback);
     usbGuardFallback = null;
@@ -16731,6 +16910,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     usbGuardBusy = false;
   }
   async function guardUsbExclusive() {
+    if (usbDirectMode) return;
     if (usbGuardBusy || mode !== "usb" || !mirror.running && !usbStarting || usbManualStop) return;
     usbGuardBusy = true;
     try {
@@ -16762,7 +16942,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   var wifiKeepAlive = null;
   var usbManualStop = false;
   var usbStarting = false;
-  var usbConnectedAt = 0;
   var usbAutoRetries = 0;
   var usbRetryTimer = null;
   var usbStableTimer = null;
@@ -16835,6 +17014,43 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     if (span) span.textContent = label;
     const fsLbl = $("btn-fs-fullscreen")?.querySelector(".lbl3");
     if (fsLbl) fsLbl.textContent = label;
+  }
+  function handleShortcut(e) {
+    if (e.repeat || e.defaultPrevented) return false;
+    if (e.key === "Escape" && e.shiftKey) {
+      e.preventDefault();
+      $("btn-stop")?.click();
+      return true;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    const key = String(e.key || "").toLowerCase();
+    if (key === "h") {
+      e.preventDefault();
+      toggleFullscreen();
+      return true;
+    }
+    if (key === "m") {
+      e.preventDefault();
+      $("btn-mute")?.click();
+      return true;
+    }
+    const ui = window.__appUI;
+    if (key === "i" || key === "v") {
+      e.preventDefault();
+      ui?.setFocus?.();
+      return true;
+    }
+    if (key === "o") {
+      e.preventDefault();
+      ui?.toggleRailDrawer?.();
+      return true;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      ui?.setFocus?.(false);
+      return true;
+    }
+    return false;
   }
   function releaseCanvasInputs() {
     _canvasAbort?.abort();
@@ -17060,6 +17276,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     }, { signal });
     sink.addEventListener("keydown", async (e) => {
       if (e.isComposing || composing) return;
+      if (handleShortcut(e)) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
         e.preventDefault();
         try {
@@ -17187,7 +17404,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       if (mirroring) {
         usbStarting = false;
         if (mode === "usb") {
-          usbConnectedAt = Date.now();
           if (!usbGuardWorker && !usbGuardFallback) startUsbGuard();
           clearTimeout(usbStableTimer);
           usbStableTimer = setTimeout(() => {
@@ -17245,6 +17461,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       toast("\u9519\u8BEF", String(err?.message || err));
     },
     onStats(s) {
+      let sizeChanged = false;
       const liveCanvas = document.querySelector("#stage canvas");
       if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0 && (s.frames ?? 0) > 0) {
         const cw = Number(liveCanvas.width);
@@ -17255,12 +17472,13 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
             mirror._size = { width: cw, height: ch };
           } catch {
           }
+          sizeChanged = true;
         }
       }
       if ($("stat-res")) {
         const sizeTxt = s.width && s.height ? s.width + "\xD7" + s.height : "\u2014";
-        const o = collectOptions();
-        $("stat-res").textContent = o.maxSize > 0 ? sizeTxt + " (\u9650\u5236" + o.maxSize + ")" : sizeTxt + " (\u539F\u59CB)";
+        const maxSize = numOr($("opt-res")?.value, 1280);
+        $("stat-res").textContent = maxSize > 0 ? sizeTxt + " (\u9650\u5236" + maxSize + ")" : sizeTxt + " (\u539F\u59CB)";
       }
       if ($("stat-frames")) $("stat-frames").textContent = String(s.frames ?? 0);
       if ($("stat-fps")) $("stat-fps").textContent = s.fps != null ? String(s.fps) : "\u2014";
@@ -17285,7 +17503,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         $("stat-audio").title = String(s.audio);
       }
       if ($("audio-hint") && s.audio) $("audio-hint").textContent = "\u58F0\u97F3:" + s.audio;
-      fitCanvas();
+      if (sizeChanged) fitCanvas();
     },
     onFirstFrame() {
       if ($("placeholder")) $("placeholder").style.display = "none";
@@ -17502,7 +17720,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
     stopUsbGuard();
     clearTimeout(usbStableTimer);
     usbStarting = true;
-    usbConnectedAt = 0;
     hideOffline();
     const opts = collectOptions();
     const preferSerial = $("usb-device-select")?.value || null;
@@ -18071,6 +18288,16 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       restore: () => textInput ? textInput.restore() : Promise.resolve("")
     };
     window.__ctrl = () => ctrl;
+    window.__startUsbDirect = async (serial) => {
+      usbDirectMode = true;
+      setMode("usb");
+      hideOffline();
+      if ($("placeholder-text")) $("placeholder-text").textContent = "\u6709\u7EBF\u76F4\u8FDE\u4E2D\u2026";
+      logLine("info", "\u6709\u7EBF\u76F4\u8FDE(\u6D4B\u8BD5) " + (serial || "auto"));
+      await mirror.startUsbDirect(serial || null, collectOptions());
+      refreshDeviceBanner();
+      return { serial: mirror.device?.serial || "", status: "ok" };
+    };
   }
   (function bindLiveTextInput() {
     const input = $("clipboard-input");
@@ -18333,17 +18560,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   })();
   window.addEventListener("keydown", (e) => {
     const tag = (e.target?.tagName || "").toLowerCase();
-    const typing = tag === "input" || tag === "textarea" || e.target?.isContentEditable;
-    if (e.key === "Escape" && e.shiftKey) {
-      $("btn-stop")?.click();
-      return;
-    }
-    if (typing) return;
-    if (e.key === "h" || e.key === "H") {
-      toggleFullscreen();
-    } else if (e.key === "m" || e.key === "M") {
-      $("btn-mute")?.click();
-    }
+    if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+    handleShortcut(e);
   });
 })();
 /*! Bundled license information:
@@ -18375,4 +18593,3 @@ yuv-canvas/src/YCbCr.js:
    * Assumes that the output array already has alpha channel set to opaque.
    *)
 */
-//# sourceMappingURL=mirror.bundle.js.map

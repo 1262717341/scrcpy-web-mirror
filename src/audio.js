@@ -7,12 +7,12 @@
  */
 import { PCM_PROCESSOR_NAME, pcmWorkletUrl } from "./pcm-worklet.js";
 export class AudioMirror {
-  constructor() {
+  constructor(options = {}) {
     this.ctx = null;
     this.gain = null;
     this.decoder = null;
     this.playing = false;
-    this.muted = false;
+    this.muted = !!options.muted;
     this._nextTime = 0;
     this._codec = "";
     this._rate = 48000;
@@ -31,6 +31,7 @@ export class AudioMirror {
     this._underruns = 0;
     this._trimmedTotal = 0;
     this._lastTrimLog = 0;
+    this._gotConfig = false;
   }
 
   get stats() {
@@ -305,8 +306,8 @@ export class AudioMirror {
         if (!value?.data) continue;
         this._packets += 1;
         if (this.muted) continue;
-        // int16 interleaved stereo
-        const bytes = value.data;
+        // int16 interleaved stereo；与 Worklet 路径一致，先剥 scrcpy 5.x 帧头
+        const bytes = this._stripPacketHeader(value.data);
         const samples = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1);
         const frames = samples.length >> 1;
         if (frames < 1) continue;
@@ -471,5 +472,6 @@ export class AudioMirror {
     }
     this.ctx = null;
     this.gain = null;
+    this._gotConfig = false;
   }
 }

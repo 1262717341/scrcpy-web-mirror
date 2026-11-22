@@ -10,6 +10,7 @@ import {
   AdbPacketHeader,
   AdbReverseNotSupportedError,
   AdbServerClient,
+  ADB_SERVER_DEFAULT_FEATURES,
 } from "@yume-chan/adb";
 import AdbWebCredentialStore from "@yume-chan/adb-credential-web";
 import {
@@ -272,7 +273,11 @@ function createUsbDeviceTransport(selected) {
       closed = true;
     };
     try {
-      await writer.write(new TextEncoder().encode(`host:transport-id:${transportId}`));
+      // ADB Server 原始协议要求 4 位十六进制长度前缀，桥本身只转发字节
+      const command = `host:transport-id:${transportId}`;
+      await writer.write(
+        new TextEncoder().encode(command.length.toString(16).padStart(4, "0") + command)
+      );
       const { value } = await reader.read();
       const text = value ? new TextDecoder().decode(value) : "";
       if (text.slice(0, 4) !== "OKAY") {
@@ -313,11 +318,16 @@ function createUsbDeviceTransport(selected) {
     model,
     device,
     transportId,
+    // Adb 构造器会读取这些字段；缺失时 canUseFeature() 抛 "reading 'includes'"
+    maxPayloadSize: 1 * 1024 * 1024,
+    clientFeatures: ADB_SERVER_DEFAULT_FEATURES,
+    disconnected: new Promise(() => { /* 本机 adb server 生命周期由 serve.py 管理 */ }),
     banner: {
       product,
       model,
       device,
-      features: new Set(["shell_v2", "cmd", "stat_v2"]),
+      // Adb.canUseFeature() 使用 includes()，必须是数组
+      features: ["shell_v2", "cmd", "stat_v2"],
     },
     connect: openTransport,
     async addReverseTunnel() {
@@ -510,6 +520,26 @@ export async function connectWireless(target, onStatus = () => {}) {
     readTimeLimit: 0,
   });
   authTask.catch(() => {});
+  // 服务端 TCP 桥建连失败会直接关闭 WS；此前只能等 authTimeout（默认 30s）兜底，
+  // 导致不可达目标慢失败。这里让 WS 关闭/错误立即中断握手等待；
+  // 手机弹「允许 USB 调试」授权框时 WS 仍保持打开，不受影响。
+  let detachBridgeAbort = () => {};
+  const bridgeAborted = new Promise((_, reject) => {
+    const abort = (ev) =>
+      reject(
+        new WirelessError(
+          "无线通道在握手期间关闭" + (ev && ev.code ? "（code " + ev.code + "）" : ""),
+          "BRIDGE_CLOSED_DURING_AUTH"
+        )
+      );
+    ws.addEventListener("close", abort);
+    ws.addEventListener("error", abort);
+    detachBridgeAbort = () => {
+      ws.removeEventListener("close", abort);
+      ws.removeEventListener("error", abort);
+    };
+  });
+  bridgeAborted.catch(() => {}); // 避免 race 之外的 rejection 未处理
   // 首次连接手机时会弹「允许 USB 调试」，留足阅读/点击时间；排查时可用 ?auth_timeout=毫秒 调整
   const authTimeout = Math.max(
     8000,
@@ -530,6 +560,7 @@ export async function connectWireless(target, onStatus = () => {}) {
           );
         }, authTimeout);
       }),
+      bridgeAborted,
     ]);
   } catch (err) {
     try {
@@ -542,6 +573,8 @@ export async function connectWireless(target, onStatus = () => {}) {
       "AUTH_FAIL",
       err
     );
+  } finally {
+    detachBridgeAbort();
   }
 
   const adb = new Adb(transport);
