@@ -13253,8 +13253,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   var GUARD_RUN = "/data/local/tmp/panda_run";
   var SETTINGS_SNAPSHOT = "/data/local/tmp/panda_settings";
   var ADB_KEYBOARD_ID = "com.android.adbkeyboard/.AdbIME";
-  var GUARD_STALE = 30;
-  var GUARD_IDLE_EXIT = 60;
+  var GUARD_STALE = 5;
+  var GUARD_IDLE_EXIT = 20;
   var AUDIO_ROUTE_CMD = `v=$(media volume --stream 3 --get 2>/dev/null | tr -d ' ' | sed -n 's/.*:\\([0-9]*\\)\\/.*/\\1/p' | head -n 1); case "$v" in ""|*[!0-9]*) v="";; esac; if [ -n "$v" ]; then media volume --stream 3 --set $((v+1)) >/dev/null 2>&1; media volume --stream 3 --set $v >/dev/null 2>&1; fi; true`;
   function newGuardSession() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -13370,8 +13370,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this._wirelessTarget = "";
       this._sdk = 0;
       this._cleaned = false;
-      this._lateTimer = null;
-      this._lateActive = false;
       this._guardHeartbeatTimer = null;
       this.muted = false;
       this._awakeSaved = null;
@@ -13759,6 +13757,39 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       return { sdk, remain };
     }
     /**
+     * 连接恢复 / 手动重新连接时，先把上一次未恢复干净的强制常亮补回用户原值。
+     *
+     * 必须在 snapshotDeviceSettings() 之前调用：否则快照会把残留的常亮值当成
+     * “投屏前原值”写进手机端 /data/local/tmp/panda_settings，之后手机端看门狗
+     * 失联自恢复时又会写回这个常亮值 —— 这就是「重连后锁屏时间有时不正确」的根因。
+     *
+     * 判定用「当前值与快照不一致」，不能用 >= 2000000000：MIUI 等 ROM 会把
+     * 2147483647 截断成 600000（10 分钟），旧判定会把截断后的常亮值误当用户原值。
+     * 快照存在即代表上次投屏改过息屏时间且尚未恢复，以快照原值为准。
+     */
+    async restoreStaleAwake() {
+      if (!this.adb) return false;
+      const stored = this._readAwakeStored();
+      if (stored == null) return false;
+      let repaired = false;
+      try {
+        const raw = String(await this.deviceShell("settings get system screen_off_timeout", 6e3) || "").trim();
+        const current = Number(raw);
+        if (Number.isFinite(current) && current !== stored) {
+          await this.deviceShell("settings put system screen_off_timeout " + stored, 6e3);
+          repaired = true;
+          this.onLog("\u8FDE\u63A5\u6062\u590D\uFF1A\u5DF2\u628A\u4E0A\u6B21\u672A\u6062\u590D\u7684\u606F\u5C4F\u65F6\u95F4\u8865\u56DE " + Math.round(stored / 1e3) + " \u79D2");
+        }
+      } catch (e) {
+        this.onLog("\u8865\u6062\u590D\u606F\u5C4F\u65F6\u95F4\u5931\u8D25 " + (e?.message || e));
+        return false;
+      }
+      this._clearAwakeStored();
+      this._awakeSaved = null;
+      this._awakeApplied = false;
+      return repaired;
+    }
+    /**
      * v4.0.23 无线强制常亮。
      *
      * scrcpy 的 stay_awake 只改“插电时常亮”（stay_on_while_plugged_in），
@@ -13773,7 +13804,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         let original = Number(raw);
         const stored = this._readAwakeStored();
         if (stored != null) {
-          if (Number.isFinite(original) && original >= 2e9) {
+          if (Number.isFinite(original) && original !== stored) {
             await this.deviceShell("settings put system screen_off_timeout " + stored, 6e3);
             original = stored;
             this.onLog("\u68C0\u6D4B\u5230\u4E0A\u6B21\u6295\u5C4F\u672A\u6062\u590D\u606F\u5C4F\u65F6\u95F4\uFF0C\u5DF2\u5148\u8865\u56DE " + Math.round(stored / 1e3) + " \u79D2");
@@ -13911,7 +13942,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       const tail = out.split(/\n/).map((l) => l.trim()).filter((l) => l.startsWith("[")).join(" | ");
       if (alive) {
         this.onLog(
-          "\u770B\u95E8\u72D7\u5DF2\u5E03\u9632\uFF1A\u5FC3\u8DF3 5s/\u6B21\uFF0C\u5931\u8054\u8D85\u8FC7 " + GUARD_STALE + "s \u81EA\u52A8\u56DE\u6536 scrcpy" + (tail ? "\uFF1B\u624B\u673A\u65E5\u5FD7 " + tail : "")
+          "\u770B\u95E8\u72D7\u5DF2\u5E03\u9632\uFF1A\u5FC3\u8DF3 2s/\u6B21\uFF0C\u5931\u8054\u8D85\u8FC7 " + GUARD_STALE + "s \u81EA\u52A8\u56DE\u6536 scrcpy" + (tail ? "\uFF1B\u624B\u673A\u65E5\u5FD7 " + tail : "")
         );
       } else {
         this.onLog("\u770B\u95E8\u72D7\u672A\u80FD\u542F\u52A8\u3002\u8BCA\u65AD\u56DE\u663E\uFF1A" + (out.replace(/\s*\n\s*/g, " | ") || "\u65E0\u8F93\u51FA"));
@@ -13938,8 +13969,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         "while :; do",
         "  now=$(date +%s)",
         "  tick=$((tick+1))",
-        // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 5 轮（约 10 秒）一次
-        '  if [ "$tick" -le 1 ] || [ $((tick % 5)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
+        // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 10 轮（约 10 秒）一次
+        '  if [ "$tick" -le 1 ] || [ $((tick % 10)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
         '  hb=$(cat "$HB" 2>/dev/null)',
         "  hb_ts=${hb%% *}",
         "  hb_sess=${hb#* }",
@@ -13988,7 +14019,8 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         '    log "released remain=$remain"',
         "    exit 0",
         "  fi",
-        "  sleep 2",
+        // 检查粒度 1 秒：判定阈值 5 秒时能精确到秒级，不因粗粒度循环拖到 6~8 秒
+        "  sleep 1",
         "done"
       ];
       return lines.join("\n");
@@ -14029,7 +14061,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       if (this._wirelessTarget) return;
       this._guardHeartbeatTimer = setInterval(() => {
         if (this.running) void this.heartbeat();
-      }, 5e3);
+      }, 2e3);
     }
     stopGuardHeartbeat() {
       if (this._guardHeartbeatTimer) {
@@ -14112,33 +14144,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       }
       return this._sdk || 0;
     }
-    /** 无线意外断线后，短时间重连一次手机，把残留的 scrcpy 进程杀掉，恢复手机声音 */
-    async restoreWirelessAudio() {
-      const target = this._wirelessTarget;
-      if (!target) return false;
-      let conn = null;
-      try {
-        this.onLog("\u5C1D\u8BD5\u91CD\u8FDE\u624B\u673A\u91CA\u653E\u97F3\u9891\u2026");
-        conn = await connectWireless(target, () => {
-        });
-        this.adb = conn.adb;
-        const glog = await this.readAudioGuardLog(8);
-        if (glog) this.onLog("\u770B\u95E8\u72D7\u65E5\u5FD7\uFF1A" + glog.replace(/\n/g, " | "));
-        const ok = await this.releaseSessionOnDevice();
-        await this.restoreWirelessAwake();
-        this.onLog(ok ? "\u5DF2\u7ED3\u675F\u624B\u673A\u7AEF scrcpy \u5E76\u5237\u65B0\u97F3\u9891\u8DEF\u7531" : "\u672A\u80FD\u7ED3\u675F\u624B\u673A\u7AEF scrcpy\uFF0C\u97F3\u9891\u53EF\u80FD\u4ECD\u88AB\u5360\u7528");
-        return ok;
-      } catch (e) {
-        this.onLog("\u6062\u590D\u5C1D\u8BD5\u5931\u8D25\uFF1A" + (e?.message || e));
-        return false;
-      } finally {
-        try {
-          await conn?.dispose();
-        } catch {
-        }
-        this.adb = null;
-      }
-    }
     /** 无线链路心跳：真发一条 shell 命令，能立刻发现手机已断开（而不是等 TCP 超时） */
     async ping(timeoutMs = 4e3) {
       if (!this.adb?.subprocess?.noneProtocol) return false;
@@ -14179,55 +14184,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       this.client = null;
       await this.cleanupAfterDrop("\u65E0\u7EBF\u5FC3\u8DF3\u8D85\u65F6");
     }
-    /** 手机短暂离线时，后台每隔几秒试着重新连上，一连上就清掉残留的 scrcpy */
-    _scheduleLateCleanup() {
-      const target = this._wirelessTarget;
-      if (!target || this._lateActive) return;
-      this._lateActive = true;
-      let tries = 0;
-      const tick = async () => {
-        this._lateTimer = null;
-        if (!this._lateActive || tries >= 20) {
-          this._lateActive = false;
-          return;
-        }
-        tries += 1;
-        let conn = null;
-        try {
-          conn = await connectWireless(target, () => {
-          });
-          if (!this._lateActive || this.running) {
-            this._lateActive = false;
-            await conn.dispose();
-            return;
-          }
-          this.adb = conn.adb;
-          const glog = await this.readAudioGuardLog(8);
-          if (glog) {
-            this.onLog("\u770B\u95E8\u72D7\u65E5\u5FD7\uFF1A" + glog.replace(/\n/g, " | "));
-          } else {
-            this.onLog("\u770B\u95E8\u72D7\u672A\u7559\u4E0B\u65E5\u5FD7\uFF1A\u672C\u8F6E\u53EF\u80FD\u672A\u542F\u52A8\u6210\u529F\uFF08\u82E5\u65E5\u5FD7\u5E38\u51FA\u73B0\u6B64\u884C\u8BF7\u53CD\u9988\uFF09");
-          }
-          const ok = await this.releaseSessionOnDevice();
-          await this._runBeforeTeardown();
-          await this.restoreWirelessAwake();
-          this._lateActive = false;
-          this.onLog(
-            ok ? "\u624B\u673A\u5DF2\u91CD\u65B0\u4E0A\u7EBF\uFF0C\u5DF2\u7ED3\u675F\u6B8B\u7559 scrcpy\u3001\u5237\u65B0\u97F3\u9891\u8DEF\u7531\u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4" : "\u624B\u673A\u5DF2\u4E0A\u7EBF\u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4\uFF0C\u4F46\u672A\u80FD\u7ED3\u675F scrcpy\uFF0C\u8BF7\u70B9\u9876\u680F\u300C\u6062\u590D\u58F0\u97F3\u300D"
-          );
-          return;
-        } catch {
-        } finally {
-          try {
-            await conn?.dispose();
-          } catch {
-          }
-          this.adb = null;
-        }
-        if (this._lateActive) this._lateTimer = setTimeout(tick, 6e3);
-      };
-      this._lateTimer = setTimeout(tick, 6e3);
-    }
     /** 非用户主动停止的断线：停止播放 + 释放手机端音频占用 + 清掉舞台画面 */
     async cleanupAfterDrop(reason) {
       this._startEpoch += 1;
@@ -14247,17 +14203,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       await this.restoreWirelessAwake();
       await this.releaseScrcpyOnDevice();
       if (this._wirelessTarget) {
-        this.status("\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF0C\u6B63\u5728\u6062\u590D\u624B\u673A\u58F0\u97F3\u2026");
-        const ok = await this.restoreWirelessAudio();
-        await this.restoreWirelessAwake();
-        if (ok) {
-          this.onLog("\u624B\u673A\u58F0\u97F3\u5DF2\u6062\u590D");
-        } else {
-          this.onLog(
-            "\u624B\u673A\u5DF2\u79BB\u7F51\uFF0C\u65E0\u6CD5\u8FDC\u7A0B\u6E05\u7406\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u4F1A\u5728\u540E\u53F0\u7ED3\u675F scrcpy \u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4\uFF1B\u91CD\u65B0\u8054\u7F51\u540E\u82E5\u4ECD\u65E0\u58F0\uFF0C\u6309\u4E00\u6B21\u97F3\u91CF\u952E\u5373\u53EF"
-          );
-          this._scheduleLateCleanup();
-        }
+        this.status("\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF0C\u624B\u673A\u7AEF\u5C06\u81EA\u52A8\u6062\u590D\u8BBE\u7F6E\u2026");
+        this.onLog(
+          "\u65E0\u7EBF\u94FE\u8DEF\u5DF2\u65AD\u5F00\uFF0C\u4E0D\u518D\u81EA\u52A8\u91CD\u8FDE\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u5C06\u5728\u7EA6 5 \u79D2\u5185\u7ED3\u675F scrcpy \u5E76\u6062\u590D\u8F93\u5165\u6CD5/\u606F\u5C4F\u65F6\u95F4\uFF1B\u5982\u9700\u7EE7\u7EED\u6295\u5C4F\u8BF7\u624B\u52A8\u91CD\u65B0\u8FDE\u63A5"
+        );
       }
       try {
         await this.adb?.close();
@@ -14561,6 +14510,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       });
       const videoStream = await client.videoStream;
       if (!videoStream) throw new MirrorError("scrcpy \u672A\u8FD4\u56DE\u89C6\u9891\u6D41", "NO_VIDEO");
+      await this.restoreStaleAwake();
       await this.snapshotDeviceSettings();
       await this.applyWirelessAwake();
       this.startGuardHeartbeat();
@@ -14767,11 +14717,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         clearInterval(this._statsTimer);
         this._statsTimer = null;
       }
-      if (this._lateTimer) {
-        clearTimeout(this._lateTimer);
-        this._lateTimer = null;
-      }
-      this._lateActive = false;
       await this.restoreWirelessAwake();
       await this._runBeforeTeardown();
       try {
@@ -16876,21 +16821,10 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   }
   function scheduleUsbReconnect(reason) {
     if (mode !== "usb" || usbManualStop || usbStarting) return;
-    const delays = [1500, 2500, 4e3, 6500, 1e4, 15e3];
-    if (usbAutoRetries >= delays.length) {
-      logLine("error", "USB \u81EA\u52A8\u91CD\u8FDE\u5DF2\u5C1D\u8BD5 " + delays.length + " \u6B21\u4ECD\u672A\u6062\u590D\uFF0C\u8BF7\u68C0\u67E5\u7EBF\u6750\u3001\u63A5\u53E3\u5360\u7528\u540E\u70B9\u300C\u91CD\u65B0\u8FDE\u63A5\u300D");
-      toast("USB \u6682\u672A\u6062\u590D", "\u81EA\u52A8\u91CD\u8FDE\u5DF2\u6682\u505C\uFF0C\u53EF\u624B\u52A8\u70B9\u91CD\u65B0\u8FDE\u63A5");
-      return;
-    }
-    const attempt = ++usbAutoRetries;
-    const delay2 = delays[attempt - 1];
     clearTimeout(usbRetryTimer);
-    toast("USB \u94FE\u8DEF\u4E2D\u65AD", "\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\uFF08" + attempt + "/" + delays.length + "\uFF09");
-    logLine("warn", "USB \u94FE\u8DEF\u4E2D\u65AD\uFF08" + reason + "\uFF09\uFF0C" + delay2 / 1e3 + " \u79D2\u540E\u81EA\u52A8\u91CD\u8FDE " + attempt + "/" + delays.length);
-    usbRetryTimer = setTimeout(() => {
-      usbRetryTimer = null;
-      if (!usbManualStop) startUsb(true, true);
-    }, delay2);
+    usbRetryTimer = null;
+    logLine("warn", "USB \u94FE\u8DEF\u4E2D\u65AD\uFF08" + reason + "\uFF09\uFF1A\u5DF2\u505C\u6B62\u81EA\u52A8\u91CD\u8FDE\uFF0C\u8BF7\u68C0\u67E5\u7EBF\u6750/\u63A5\u53E3\u540E\u70B9\u300C\u91CD\u65B0\u8FDE\u63A5\u300D");
+    toast("USB \u5DF2\u65AD\u5F00", "\u4E0D\u4F1A\u81EA\u52A8\u91CD\u8FDE\uFF0C\u53EF\u624B\u52A8\u70B9\u300C\u91CD\u65B0\u8FDE\u63A5\u300D");
   }
   var usbGuardWorker = null;
   var usbGuardFallback = null;
@@ -17405,11 +17339,6 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
         usbStarting = false;
         if (mode === "usb") {
           if (!usbGuardWorker && !usbGuardFallback) startUsbGuard();
-          clearTimeout(usbStableTimer);
-          usbStableTimer = setTimeout(() => {
-            usbAutoRetries = 0;
-            logLine("ok", "USB \u5DF2\u8FDE\u7EED\u7A33\u5B9A 60 \u79D2\uFF0C\u81EA\u52A8\u91CD\u8FDE\u8BA1\u6570\u5DF2\u91CD\u7F6E");
-          }, 6e4);
         }
         setStepsDone(3);
         hideOffline();
@@ -17443,7 +17372,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
           }
         }
         showOffline(
-          text === "\u6295\u5C4F\u5DF2\u7ED3\u675F" ? "\u8FDE\u63A5\u5DF2\u7ED3\u675F\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5" : mode === "wifi" ? "\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF1A\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u4F1A\u81EA\u52A8\u7ED3\u675F scrcpy\uFF0C\u7EA6 10 \u79D2\u5185\u6062\u590D\u624B\u673A\u5916\u653E" : "\u8FDE\u63A5\u5DF2\u65AD\u5F00\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5"
+          text === "\u6295\u5C4F\u5DF2\u7ED3\u675F" ? "\u8FDE\u63A5\u5DF2\u7ED3\u675F\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5" : mode === "wifi" ? "\u65E0\u7EBF\u5DF2\u65AD\u5F00\uFF1A\u4E0D\u4F1A\u81EA\u52A8\u91CD\u8FDE\uFF0C\u624B\u673A\u7AEF\u770B\u95E8\u72D7\u7EA6 5 \u79D2\u5185\u7ED3\u675F scrcpy \u5E76\u6062\u590D\u8BBE\u7F6E" : "\u8FDE\u63A5\u5DF2\u65AD\u5F00\uFF0C\u53EF\u91CD\u65B0\u8FDE\u63A5"
         );
         if ((text === "\u5DF2\u65AD\u5F00" || text === "\u6295\u5C4F\u5DF2\u7ED3\u675F") && mode === "usb") {
           scheduleUsbReconnect(text);
@@ -17564,7 +17493,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
   function startHeartbeatWorker() {
     stopHeartbeatWorker();
     try {
-      const code = "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},5000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
+      const code = "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},2000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
       const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       hbWorker = new Worker(url);
       hbWorker.onmessage = () => {
@@ -17575,7 +17504,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       logLine("log", "\u5FC3\u8DF3 Worker \u4E0D\u53EF\u7528\uFF0C\u6539\u7528\u9875\u9762\u5B9A\u65F6\u5668\uFF1A" + String(e?.message || e));
       hbFallback = setInterval(() => {
         if (mirror.running) mirror.heartbeat();
-      }, 6e3);
+      }, 2e3);
     }
   }
   function stopHeartbeatWorker() {
@@ -17771,7 +17700,7 @@ registerProcessor("${PCM_PROCESSOR_NAME}", PcmSink);
       usbStarting = false;
       if (autoRetry && !usbManualStop) {
         if (err?.code === "NO_SERVER" && !mirror.hasServerJarCache()) {
-          logLine("error", "\u672C\u5730\u670D\u52A1\u4E0D\u53EF\u7528\u4E14\u6CA1\u6709 scrcpy-server.jar \u7F13\u5B58\uFF0C\u5DF2\u6682\u505C\u81EA\u52A8\u91CD\u8FDE\uFF1B\u542F\u52A8\u672C\u5730\u670D\u52A1\u540E\u8BF7\u70B9\u300C\u91CD\u65B0\u8FDE\u63A5\u300D");
+          logLine("error", "\u672C\u5730\u670D\u52A1\u4E0D\u53EF\u7528\u4E14\u6CA1\u6709 scrcpy-server.jar \u7F13\u5B58\uFF0C\u5DF2\u505C\u6B62\u91CD\u8FDE\uFF1B\u542F\u52A8\u672C\u5730\u670D\u52A1\u540E\u8BF7\u70B9\u300C\u91CD\u65B0\u8FDE\u63A5\u300D");
           toast("\u672C\u5730\u670D\u52A1\u5DF2\u505C\u6B62", "\u542F\u52A8 scrcpy \u4FBF\u6377\u7F51\u9875\u7248\u540E\u5237\u65B0\u9875\u9762\u518D\u8FDE\u63A5");
         } else {
           scheduleUsbReconnect("\u91CD\u8FDE\u5931\u8D25\uFF1A" + String(err?.message || err));

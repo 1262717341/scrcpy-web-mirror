@@ -289,23 +289,18 @@ function bindSettingsSaver() {
   });
 }
 
+/**
+ * 意外断开只提示、不自动重连。
+ * 旧版按 1.5/2.5/4/6.5/10/15 秒分级重连：物理拔线/系统重新枚举期间会反复弹授权选择器、
+ * 覆盖用户操作，且上一轮未清理干净的设置快照可能被新会话错误消费。
+ * 现在断开即停在干净状态，由用户手动点「重新连接」；设备侧设置恢复交给手机端看门狗。
+ */
 function scheduleUsbReconnect(reason) {
   if (mode !== "usb" || usbManualStop || usbStarting) return;
-  const delays = [1500, 2500, 4000, 6500, 10000, 15000];
-  if (usbAutoRetries >= delays.length) {
-    logLine("error", "USB 自动重连已尝试 " + delays.length + " 次仍未恢复，请检查线材、接口占用后点「重新连接」");
-    toast("USB 暂未恢复", "自动重连已暂停，可手动点重新连接");
-    return;
-  }
-  const attempt = ++usbAutoRetries;
-  const delay = delays[attempt - 1];
   clearTimeout(usbRetryTimer);
-  toast("USB 链路中断", "正在自动重连（" + attempt + "/" + delays.length + "）");
-  logLine("warn", "USB 链路中断（" + reason + "），" + (delay / 1000) + " 秒后自动重连 " + attempt + "/" + delays.length);
-  usbRetryTimer = setTimeout(() => {
-    usbRetryTimer = null;
-    if (!usbManualStop) startUsb(true, true);
-  }, delay);
+  usbRetryTimer = null;
+  logLine("warn", "USB 链路中断（" + reason + "）：已停止自动重连，请检查线材/接口后点「重新连接」");
+  toast("USB 已断开", "不会自动重连，可手动点「重新连接」");
 }
 
 // WebUSB 必须独占 Android ADB 接口。运行期间用 Worker 定时检查 5037，
@@ -869,12 +864,8 @@ const mirror = new AdbMirror({
     if (mirroring) {
       usbStarting = false;
       if (mode === "usb") {
+        // 意外断开不再自动重连，故不再维护"稳定 60 秒重置重连计数"的定时器
         if (!usbGuardWorker && !usbGuardFallback) startUsbGuard();
-        clearTimeout(usbStableTimer);
-        usbStableTimer = setTimeout(() => {
-          usbAutoRetries = 0;
-          logLine("ok", "USB 已连续稳定 60 秒，自动重连计数已重置");
-        }, 60000);
       }
       setStepsDone(3);
       hideOffline();
@@ -912,7 +903,7 @@ const mirror = new AdbMirror({
         text === "投屏已结束"
           ? "连接已结束，可重新连接"
           : mode === "wifi"
-            ? "无线已断开：手机端看门狗会自动结束 scrcpy，约 10 秒内恢复手机外放"
+            ? "无线已断开：不会自动重连，手机端看门狗约 5 秒内结束 scrcpy 并恢复设置"
             : "连接已断开，可重新连接"
       );
       if ((text === "已断开" || text === "投屏已结束") && mode === "usb") {
@@ -1047,7 +1038,8 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 /* ---------- 心跳 Worker ----------
- * 看门狗只认「心跳」：页面每 5 秒通过现有 ADB 通道写一次，写进去就证明通道还活着。
+ * 看门狗只认「心跳」：页面每 2 秒通过现有 ADB 通道写一次，写进去就证明通道还活着。
+ * 判定阈值 5 秒，心跳周期远小于阈值，留 3 秒抖动余量。
  * 后台标签页会把主线程定时器压到 1 分钟一次，那样看门狗会误判失联，所以心跳交给 Worker。
  */
 let hbWorker = null;
@@ -1056,7 +1048,7 @@ function startHeartbeatWorker() {
   stopHeartbeatWorker();
   try {
     const code =
-      "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},5000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
+      "let t=null;onmessage=function(e){if(e.data==='start'){if(t)clearInterval(t);t=setInterval(function(){postMessage(1)},2000)}else if(e.data==='stop'){if(t)clearInterval(t);t=null}};";
     const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
     hbWorker = new Worker(url);
     hbWorker.onmessage = () => {
@@ -1065,11 +1057,11 @@ function startHeartbeatWorker() {
     hbWorker.postMessage("start");
   } catch (e) {
     // Worker 起不来（CSP 拦了 blob: 等）必须补一个定时器，
-    // 否则心跳只在布防时写一次，30 秒后看门狗会把正常投屏当成断线杀掉。
+    // 否则心跳只在布防时写一次，5 秒后看门狗会把正常投屏当成断线杀掉。
     logLine("log", "心跳 Worker 不可用，改用页面定时器：" + String(e?.message || e));
     hbFallback = setInterval(() => {
       if (mirror.running) mirror.heartbeat();
-    }, 6000);
+    }, 2000);
   }
 }
 function stopHeartbeatWorker() {
@@ -1318,8 +1310,9 @@ async function startUsb(allowAnyMode = false, autoRetry = false) {
     showFail(err);
     usbStarting = false;
     if (autoRetry && !usbManualStop) {
+      // 不再自动重连：只给出可操作的提示，由用户手动点「重新连接」
       if (err?.code === "NO_SERVER" && !mirror.hasServerJarCache()) {
-        logLine("error", "本地服务不可用且没有 scrcpy-server.jar 缓存，已暂停自动重连；启动本地服务后请点「重新连接」");
+        logLine("error", "本地服务不可用且没有 scrcpy-server.jar 缓存，已停止重连；启动本地服务后请点「重新连接」");
         toast("本地服务已停止", "启动 scrcpy 便捷网页版后刷新页面再连接");
       } else {
         scheduleUsbReconnect("重连失败：" + String(err?.message || err));

@@ -157,14 +157,15 @@ const ADB_KEYBOARD_ID = "com.android.adbkeyboard/.AdbIME";
 
 /**
  * 看门狗判据只有两条，够用且不会误杀：
- *  1) 心跳过期：页面每 5 秒通过已建立的 ADB 通道喂一次，30 秒没更新才算死。
+ *  1) 心跳过期：页面每 2 秒通过已建立的 ADB 通道喂一次，5 秒没更新才算死。
  *     写心跳这个动作本身就是链路探活 —— 写得进去说明通道还活着。
+ *     心跳周期(2s)远小于判定阈值(5s)，留 3 秒抖动余量，不会把正常投屏误杀。
  *  2) Wi-Fi 的 IPv4 地址连续 2 次消失（关 Wi-Fi / 掉线）：确定事实，直接动手。
  * 不再 ping 网关、不再数 TCP ESTABLISHED、不再按端口猜状态。
  */
-const GUARD_STALE = 30;
+const GUARD_STALE = 5;
 /** 从没见过心跳时的自退/回收时间（秒）：布防前一定会先写一次心跳，读不到就是异常，按失联处理 */
-const GUARD_IDLE_EXIT = 60;
+const GUARD_IDLE_EXIT = 20;
 
 /** 净音量不变的音频路由刷新：抬一格再原样写回，不改用户音量、不弹 UI */
 const AUDIO_ROUTE_CMD =
@@ -312,10 +313,8 @@ export class AdbMirror {
     this._wirelessTarget = "";
     this._sdk = 0;
     this._cleaned = false;
-    this._lateTimer = null;
-    this._lateActive = false;
     // USB 场景内部心跳：无线由 page-mirror 的 Worker 写，USB 没有保活逻辑，
-    // 由这里补一个定时器，否则 USB 布防的看门狗会在 60s 后误判失联。
+    // 由这里补一个定时器，否则 USB 布防的看门狗会在 IDLE(20s) 后误判失联。
     this._guardHeartbeatTimer = null;
     this.muted = false;
     // v4.0.23：无线投屏时 scrcpy 的 stay_awake 依赖“插电常亮”，手机没插电仍会息屏。
@@ -782,6 +781,41 @@ export class AdbMirror {
   }
 
   /**
+   * 连接恢复 / 手动重新连接时，先把上一次未恢复干净的强制常亮补回用户原值。
+   *
+   * 必须在 snapshotDeviceSettings() 之前调用：否则快照会把残留的常亮值当成
+   * “投屏前原值”写进手机端 /data/local/tmp/panda_settings，之后手机端看门狗
+   * 失联自恢复时又会写回这个常亮值 —— 这就是「重连后锁屏时间有时不正确」的根因。
+   *
+   * 判定用「当前值与快照不一致」，不能用 >= 2000000000：MIUI 等 ROM 会把
+   * 2147483647 截断成 600000（10 分钟），旧判定会把截断后的常亮值误当用户原值。
+   * 快照存在即代表上次投屏改过息屏时间且尚未恢复，以快照原值为准。
+   */
+  async restoreStaleAwake() {
+    if (!this.adb) return false;
+    const stored = this._readAwakeStored();
+    if (stored == null) return false;
+    let repaired = false;
+    try {
+      const raw = String((await this.deviceShell("settings get system screen_off_timeout", 6000)) || "").trim();
+      const current = Number(raw);
+      if (Number.isFinite(current) && current !== stored) {
+        await this.deviceShell("settings put system screen_off_timeout " + stored, 6000);
+        repaired = true;
+        this.onLog("连接恢复：已把上次未恢复的息屏时间补回 " + Math.round(stored / 1000) + " 秒");
+      }
+    } catch (e) {
+      this.onLog("补恢复息屏时间失败 " + (e?.message || e));
+      return false; // 保留快照，下次连接继续尝试
+    }
+    this._clearAwakeStored();
+    // 让随后的 applyWirelessAwake 基于补回后的干净值重新建立本轮状态
+    this._awakeSaved = null;
+    this._awakeApplied = false;
+    return repaired;
+  }
+
+  /**
    * v4.0.23 无线强制常亮。
    *
    * scrcpy 的 stay_awake 只改“插电时常亮”（stay_on_while_plugged_in），
@@ -794,10 +828,11 @@ export class AdbMirror {
     try {
       const raw = String((await this.deviceShell("settings get system screen_off_timeout", 6000)) || "").trim();
       let original = Number(raw);
-      // 上次页面被直接关闭/服务被停止，恢复命令没发出去：下次连接先把快照补回去。
+      // 兜底：正常路径已由 restoreStaleAwake 在写快照前补回。这里再挡一道，
+      // 防止其它调用路径遗漏；同样用「与快照不一致」判定，兼容 MIUI 的 600000 截断。
       const stored = this._readAwakeStored();
       if (stored != null) {
-        if (Number.isFinite(original) && original >= 2000000000) {
+        if (Number.isFinite(original) && original !== stored) {
           await this.deviceShell("settings put system screen_off_timeout " + stored, 6000);
           original = stored;
           this.onLog("检测到上次投屏未恢复息屏时间，已先补回 " + Math.round(stored / 1000) + " 秒");
@@ -967,7 +1002,7 @@ export class AdbMirror {
       .join(" | ");
     if (alive) {
       this.onLog(
-        "看门狗已布防：心跳 5s/次，失联超过 " + GUARD_STALE + "s 自动回收 scrcpy" +
+        "看门狗已布防：心跳 2s/次，失联超过 " + GUARD_STALE + "s 自动回收 scrcpy" +
           (tail ? "；手机日志 " + tail : "")
       );
     } else {
@@ -996,8 +1031,8 @@ export class AdbMirror {
       "while :; do",
       "  now=$(date +%s)",
       "  tick=$((tick+1))",
-      // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 5 轮（约 10 秒）一次
-      '  if [ "$tick" -le 1 ] || [ $((tick % 5)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
+      // 运行标记：第一轮立即写一次（宿主要靠它判断有没有起来），之后每 10 轮（约 10 秒）一次
+      '  if [ "$tick" -le 1 ] || [ $((tick % 10)) -eq 0 ]; then echo "$now $SESSION" > "$RUN"; fi',
       '  hb=$(cat "$HB" 2>/dev/null)',
       "  hb_ts=${hb%% *}",
       "  hb_sess=${hb#* }",
@@ -1046,7 +1081,8 @@ export class AdbMirror {
       '    log "released remain=$remain"',
       "    exit 0",
       "  fi",
-      "  sleep 2",
+      // 检查粒度 1 秒：判定阈值 5 秒时能精确到秒级，不因粗粒度循环拖到 6~8 秒
+      "  sleep 1",
       "done",
     ];
     return lines.join("\n");
@@ -1091,9 +1127,10 @@ export class AdbMirror {
   startGuardHeartbeat() {
     this.stopGuardHeartbeat();
     if (this._wirelessTarget) return; // 无线已有 Worker 心跳
+    // 2 秒/次，与看门狗 GUARD_STALE=5s 配套：留 3 秒抖动余量，避免误杀
     this._guardHeartbeatTimer = setInterval(() => {
       if (this.running) void this.heartbeat();
-    }, 5000);
+    }, 2000);
   }
 
   stopGuardHeartbeat() {
@@ -1191,34 +1228,6 @@ export class AdbMirror {
     return this._sdk || 0;
   }
 
-  /** 无线意外断线后，短时间重连一次手机，把残留的 scrcpy 进程杀掉，恢复手机声音 */
-  async restoreWirelessAudio() {
-    const target = this._wirelessTarget;
-    if (!target) return false;
-    let conn = null;
-    try {
-      this.onLog("尝试重连手机释放音频…");
-      conn = await connectWireless(target, () => {});
-      this.adb = conn.adb;
-      const glog = await this.readAudioGuardLog(8);
-      if (glog) this.onLog("看门狗日志：" + glog.replace(/\n/g, " | "));
-      const ok = await this.releaseSessionOnDevice();
-      await this.restoreWirelessAwake();
-      this.onLog(ok ? "已结束手机端 scrcpy 并刷新音频路由" : "未能结束手机端 scrcpy，音频可能仍被占用");
-      return ok;
-    } catch (e) {
-      this.onLog("恢复尝试失败：" + (e?.message || e));
-      return false;
-    } finally {
-      try {
-        await conn?.dispose();
-      } catch {
-        /* ignore */
-      }
-      this.adb = null;
-    }
-  }
-
   /** 无线链路心跳：真发一条 shell 命令，能立刻发现手机已断开（而不是等 TCP 超时） */
   async ping(timeoutMs = 4000) {
     if (!this.adb?.subprocess?.noneProtocol) return false;
@@ -1263,63 +1272,6 @@ export class AdbMirror {
     await this.cleanupAfterDrop("无线心跳超时");
   }
 
-  /** 手机短暂离线时，后台每隔几秒试着重新连上，一连上就清掉残留的 scrcpy */
-  _scheduleLateCleanup() {
-    const target = this._wirelessTarget;
-    if (!target || this._lateActive) return;
-    this._lateActive = true;
-    let tries = 0;
-    const tick = async () => {
-      this._lateTimer = null;
-      if (!this._lateActive || tries >= 20) {
-        this._lateActive = false;
-        return;
-      }
-      tries += 1;
-      let conn = null;
-      try {
-        conn = await connectWireless(target, () => {});
-        if (!this._lateActive || this.running) {
-          // 期间用户已经重新开了会话，别插手
-          this._lateActive = false;
-          await conn.dispose();
-          return;
-        }
-        this.adb = conn.adb;
-        // 先回读看门狗日志：它到底有没有跑、什么时候动手的，全在这一步见分晓
-        const glog = await this.readAudioGuardLog(8);
-        if (glog) {
-          this.onLog("看门狗日志：" + glog.replace(/\n/g, " | "));
-        } else {
-          this.onLog("看门狗未留下日志：本轮可能未启动成功（若日志常出现此行请反馈）");
-        }
-        const ok = await this.releaseSessionOnDevice();
-        // 重新上线时补恢复输入法/息屏时间：断网瞬间这些命令发不出去，
-        // 现在通道回来了，把残留状态清干净，避免手机长期停在 ADB 输入法或常亮。
-        await this._runBeforeTeardown();
-        await this.restoreWirelessAwake();
-        this._lateActive = false;
-        this.onLog(
-          ok
-            ? "手机已重新上线，已结束残留 scrcpy、刷新音频路由并恢复输入法/息屏时间"
-            : "手机已上线并恢复输入法/息屏时间，但未能结束 scrcpy，请点顶栏「恢复声音」"
-        );
-        return;
-      } catch {
-        /* 手机还没回到网络 */
-      } finally {
-        try {
-          await conn?.dispose();
-        } catch {
-          /* ignore */
-        }
-        this.adb = null;
-      }
-      if (this._lateActive) this._lateTimer = setTimeout(tick, 6000);
-    };
-    this._lateTimer = setTimeout(tick, 6000);
-  }
-
   /** 非用户主动停止的断线：停止播放 + 释放手机端音频占用 + 清掉舞台画面 */
   async cleanupAfterDrop(reason) {
     this._startEpoch += 1; // 断线清理同样作废在途启动
@@ -1337,25 +1289,20 @@ export class AdbMirror {
       /* ignore */
     }
     this.audio = new AudioMirror({ muted: this.muted });
-    // 关键顺序：输入法/息屏恢复必须在 restoreWirelessAudio（其内部会 this.adb = null）
-    // 之前执行。旧版把 _runBeforeTeardown 放在无线重连之后，通道已被置空，恢复必然失败，
-    // 手机就残留在 ADB 输入法 —— 这是异常断开后输入法不恢复的直接原因。
+    // 关键顺序：输入法/息屏恢复必须放在 releaseScrcpyOnDevice 之前，趁当前通道还活着
+    // 尽量下发一次。旧版把恢复排在无线重连之后，通道已被置空，恢复必然失败。
     await this._runBeforeTeardown();
     await this.restoreWirelessAwake();
     await this.releaseScrcpyOnDevice();
     if (this._wirelessTarget) {
-      this.status("无线已断开，正在恢复手机声音…");
-      const ok = await this.restoreWirelessAudio();
-      // 重连成功后 ADB 又可用，补一次息屏时间恢复（第一次可能因断网失败）
-      await this.restoreWirelessAwake();
-      if (ok) {
-        this.onLog("手机声音已恢复");
-      } else {
-        this.onLog(
-          "手机已离网，无法远程清理：手机端看门狗会在后台结束 scrcpy 并恢复输入法/息屏时间；重新联网后若仍无声，按一次音量键即可"
-        );
-        this._scheduleLateCleanup();
-      }
+      // 意外断开不再自动重连：不主动 connectWireless，也不后台反复探测手机。
+      // 断开当下能在现有通道做的清理已全部做完；剩下的由手机端看门狗在约 5 秒内
+      // 自行结束 scrcpy、刷新音频路由、恢复输入法与息屏时间。
+      // 用户手动重新连接时会走 restoreStaleAwake 补回残留的常亮值。
+      this.status("无线已断开，手机端将自动恢复设置…");
+      this.onLog(
+        "无线链路已断开，不再自动重连：手机端看门狗将在约 5 秒内结束 scrcpy 并恢复输入法/息屏时间；如需继续投屏请手动重新连接"
+      );
     }
     try {
       await this.adb?.close();
@@ -1702,8 +1649,11 @@ export class AdbMirror {
     const videoStream = await client.videoStream;
     if (!videoStream) throw new MirrorError("scrcpy 未返回视频流", "NO_VIDEO");
 
-    // 视频流就绪 = 投屏真正建立。此刻 ADB 通道活着，先把投屏前的输入法/息屏时间
-    // 快照写到手机端，供看门狗在拔线/断网后自恢复；必须在改设置之前读原值。
+    // 视频流就绪 = 投屏真正建立。此刻 ADB 通道活着。
+    // 顺序很关键：先把上一次未恢复干净的强制常亮补回原值（兼容 MIUI 把
+    // 2147483647 截断成 600000 的情况），再写快照、再改本轮设置。
+    // 否则快照会记下被污染的常亮值，看门狗失联自恢复时把错误值写回手机。
+    await this.restoreStaleAwake();
     await this.snapshotDeviceSettings();
     // v4.0.23：视频流就绪后再改息屏时间，启动失败不会留下被改过的系统设置。
     await this.applyWirelessAwake();
@@ -1928,11 +1878,6 @@ export class AdbMirror {
       clearInterval(this._statsTimer);
       this._statsTimer = null;
     }
-    if (this._lateTimer) {
-      clearTimeout(this._lateTimer);
-      this._lateTimer = null;
-    }
-    this._lateActive = false;
     // v4.2.2：先把息屏时间恢复掉，再去做可能超时的收尾。
     // 旧顺序把它放在最后，「停止服务」只等 3 秒时会被直接截断，手机就停在最大值。
     await this.restoreWirelessAwake();
